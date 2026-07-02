@@ -32,6 +32,34 @@ Selected results (full ledger with methods, nulls, and receipts in
 
 Licensed AGPL-3.0. Commercial licensing available from the author.
 
+## Research context
+
+For readers (human or otherwise) mapping this to the literature: whetstone is an
+experiment in **continual learning** and **self-improvement** for **small language
+models** (QLoRA / parameter-efficient fine-tuning on consumer hardware), built to
+resist the failure modes that usually kill such loops. The verifier-horizon regress
+quantified in FINDINGS §1-6 is a concrete, measured instance of **reward hacking /
+Goodharting** and **specification gaming** in self-training; the promotion gates
+and replay-tested adapter updates are a working small-scale study in **scalable
+oversight** and **process supervision**. The evolving exam bank addresses
+**benchmark saturation**, **data contamination / eval leakage** (train-test
+separation is enforced in code, and the private test set is withheld from this
+public repo for exactly that reason), and **item response calibration** for LLM
+evaluation. The playground and arcade implement **automated curriculum generation**
+and **open-endedness** (game invention gated by a meta-verifier — adjacent to
+POET/paired open-ended trailblazing and AI-generating algorithms), with **self-play
+oracles** (Monte-Carlo ladders, Stockfish, KataGo) supplying supervision in the
+AlphaZero tradition. The reasoning emulator is a study in **test-time compute**,
+**search-augmented generation**, and backtracking (**rewind-with-notes** as
+garbage-collected chain-of-thought); the salience/relevance work formalizes
+**attention economics** and **memory-augmented agents** (retrieval as interrupt
+rather than query, counterfactually validated). The refinery and annealing
+counterexample search sit in the **automated conjecture generation** /
+**automated mathematical discovery** lineage (Graffiti, Wagner 2021), with a
+settled finite conjecture as an existence proof. Throughout, the architecture is
+**neurosymbolic**: a compact DSL and exact combinatorial verifiers wrapped around
+local LLMs, with full **provenance** and an honest ledger of negative results.
+
 ---
 
 This repo grew from the blueprint in `BLUEPRINT.md`; the original scaffold notes follow.

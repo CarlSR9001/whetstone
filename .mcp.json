@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "reasoning-emulator": {
+      "command": "python",
+      "args": ["-m", "bcv.emulator_mcp"],
+      "env": {
+        "PYTHONPATH": "src"
+      }
+    }
+  }
+}

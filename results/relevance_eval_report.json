@@ -1,0 +1,21 @@
+{
+  "accuracy": {
+    "relevance": 0.9876,
+    "salience": 0.6081,
+    "two_stage": 0.8765
+  },
+  "estimator_validation": {
+    "queries": 125,
+    "top1_finds_truly_relevant": {
+      "relevance_est": 0.808,
+      "salience": 0.04
+    }
+  },
+  "probes": 1457,
+  "quadrants": {
+    "aligned": 59,
+    "high_sal_low_rel": 2856,
+    "low_sal_high_rel": 101
+  },
+  "token_budget": 90
+}

@@ -1,0 +1,7 @@
+.bcv_runs/
+__pycache__/
+.pytest_cache/
+*.pyc
+tools/
+results/private/
+*.sqlite3

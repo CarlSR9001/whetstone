@@ -1,0 +1,269 @@
+# whetstone
+
+**Two learners grinding each other sharp: a student that must earn every
+promotion, and an examiner that must earn the right to judge it — with every
+label anchored to an oracle that cannot practically be wrong.**
+
+whetstone is a self-improving research harness built around one rule: *nothing is
+believed until something exact has tried to kill it.* A verifier-gated student
+(QLoRA adapters on a local 4B) trains on experience milled from root oracles —
+exhaustive graph enumeration, simulated-annealing counterexample search, exact
+game simulators, Monte-Carlo consensus, Stockfish, KataGo — and is graded by an
+evolving exam bank that quarantines anything the student trained on, learns which
+items discriminate, retires the saturated, and feeds its retired exams back as
+training fuel.
+
+Selected results (full ledger with methods, nulls, and receipts in
+[FINDINGS.md](FINDINGS.md); artifacts in [results/](results/)):
+
+- Settled an open finite conjecture: degree-descending greedy coloring is NOT
+  optimal on connected triangle-free non-bipartite graphs (minimal
+  counterexample: 11 vertices, 13 edges — found by annealing, minimized, exact).
+- Quantified the verifier-horizon regress: 99/121 conjectures with precision 1.0
+  at n<=6 are false at n=7/8; acceptance horizons must sit strictly inside
+  stress horizons or self-training loops train on artifacts.
+- Measured salience vs relevance: the most salient memory is the counterfactually
+  useful one 4% of the time; a query-conditioned relevance score, 81%.
+- Ran a full unattended continual-learning loop: cold-start 0/8 -> 8/8 in one
+  gated round; the multi-domain generation cracked a cross-domain frontier its
+  own examiner had exposed (base 1/33 -> gen-2 4/33, first MIS pass).
+- The private promotion exam bank is deliberately NOT in this repo: publishing it
+  would let future models train on it — the leakage rule at internet scale.
+
+Licensed AGPL-3.0. Commercial licensing available from the author.
+
+---
+
+This repo grew from the blueprint in `BLUEPRINT.md`; the original scaffold notes follow.
+
+What exists now:
+
+- A JSONL-backed cognitive branch store.
+- Typed commits/events with provenance.
+- Branch creation, checkout, merge, diff, blame, and bisect.
+- A patch-only Markdown editor with conservation hooks.
+- A benchmark harness that injects long-document corruption and verifies that hooks catch it.
+- A local Ollama-backed Markdown edit agent that writes only verifier-accepted patches.
+
+Run the tests:
+
+```powershell
+python -m pytest
+```
+
+Run tests plus every current experiment:
+
+```powershell
+.\scripts\run_all.ps1
+```
+
+Run a real local-model Markdown edit against the sample agreement:
+
+```powershell
+.\scripts\run_sample_edit.ps1
+```
+
+Run the accept/retry/block usefulness benchmark:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.usefulness
+```
+
+Run the multi-document sequential edit benchmark:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.corpus_benchmark
+```
+
+Run Cognitive Git recall and coding benchmarks:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.recall_benchmark
+$env:PYTHONPATH='src'; python -m bcv.coding_benchmark --quick
+$env:PYTHONPATH='src'; python -m bcv.coding_benchmark
+```
+
+Export the seed Taste-RL preference and SFT datasets:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.taste
+```
+
+Generate a scaled synthetic Taste-RL dataset:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.taste_data --variants-per-prompt 40
+```
+
+Run the first verifier-backed graph discovery loop:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.discovery --max-n 6
+```
+
+Evaluate parseable graph conjectures from a proposal file:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_agent --max-n 6 --proposal-file sample_docs/graph_proposals.json
+```
+
+Ask the local Ollama/LM Studio model to propose graph conjectures, then verify them:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_agent --max-n 6 --use-model --max-rules 6
+```
+
+Run a second model proposal pass conditioned on the previous verifier failures:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_agent --max-n 6 --use-model --max-rules 6 --feedback-file .bcv_runs/graph_agent/proposal_evaluation.json
+```
+
+Run the larger research foundry comparison: stateless proposal loops versus an internal-git feedback loop that accumulates accepted conjectures, counterexamples, repairs, and SFT data:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.research_foundry --mode scripted --rounds 3 --max-n 6
+```
+
+Run the same foundry through the local Ollama/LM Studio model:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.research_foundry --mode model --rounds 3 --max-n 6 --max-rules 4
+```
+
+Run the foundry with a post-run scale check that stress-tests every accepted rule and
+repair at larger n and commits scale falsifications to the ledger:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.research_foundry --mode scripted --rounds 3 --max-n 6 --stress-ns 7 8
+```
+
+Run the self-contained frontier loop: FastContext 4B proposes on the GPU, the CPU
+verifier kills, per-round scale falsifications feed back into the next proposal
+prompt, and every proposal is judged for semantic novelty against the miner's
+two-atom hull:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.research_foundry --mode fastcontext --rounds 6 --max-n 6 --max-rules 6 --stress-feedback-ns 7 8 10 --library .bcv_runs/adversary_library.jsonl
+```
+
+Hunt counterexamples by simulated annealing inside a conjecture's predicate class
+(finds persist to the adversary library, which any pool can load with --library):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_adversary --expression "is_connected and is_triangle_free and not is_bipartite" --ns 9 10 11 12 13 --restarts 40 --steps 10000
+$env:PYTHONPATH='src'; python -m bcv.graph_adversary --report-file .bcv_runs/graph_generalize_rich/generalization_report.json
+```
+
+Run the model-vs-annealer counterexample duel:
+
+```powershell
+$env:PYTHONPATH='src'; python scripts/run_duel.py
+```
+
+Run the reasoning-emulator benchmark (save/load/rewind-with-notes/verifier-check as
+model-invocable controls, vs linear CoT, verifier-scored):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.emulator --dataset-path .bcv_runs/graph_repair_hard_rich/hard_heldout.jsonl --model Qwen/Qwen3-1.7B --limit 6
+```
+
+Serve the Pro Action Replay MCP server (external agents can step, dump, and poke a
+live reasoning session; registered in `.mcp.json` as `reasoning-emulator`):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.emulator_mcp
+```
+
+Run the full conjecture refinery for a domain (enumerate -> verify -> stress ->
+anneal-attack -> closure-expand library -> THEOREMS ledger + falsification museum):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.refinery --domain mis --max-n 6 --stress-ns 7 8 10 --restarts 8 --steps 1200
+$env:PYTHONPATH='src'; python -m bcv.refinery --domain coloring --max-n 6 --stress-ns 7 8 10 --restarts 8 --steps 800 --library .bcv_runs/adversary_library.jsonl
+```
+
+Train a FastContext QLoRA smoke adapter from the foundry's accumulated verifier-repair data:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.research_foundry --mode model --rounds 3 --max-n 6 --max-rules 4 --train-adapter
+```
+
+Generate a larger verifier-repair dataset for graph conjecture repair:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_repair_data --max-n 6 --max-proposals 48 --root .bcv_runs/graph_repair_data_full
+```
+
+Train a FastContext QLoRA graph-repair adapter on JSON-only verifier targets:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_lora --dataset-path .bcv_runs/graph_repair_data_full/repair_json_sft.jsonl --output-dir .bcv_runs/graph_lora_json_24_r4 --max-train-examples 24 --heldout-examples 8 --epochs 1 --max-length 256 --lora-r 4 --lora-alpha 8 --max-n 6 --train-only
+```
+
+Generate the hard repair dataset (the prompt contains counterexample evidence but not
+the answer constraint, and heldout groups share no original expression with train):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_repair_data --hard --max-n 6 --max-proposals 48 --heldout-groups 8 --root .bcv_runs/graph_repair_hard
+```
+
+Train and strictly evaluate the hard-task adapter (eval requires the output to be a
+verifier-accepted strict refinement of the prompt's original expression, and reports
+support retention plus mode-collapse diagnostics):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_lora --dataset-path .bcv_runs/graph_repair_hard/hard_train.jsonl --heldout-path .bcv_runs/graph_repair_hard/hard_heldout.jsonl --output-dir .bcv_runs/graph_lora_hard_29_r8 --max-train-examples 29 --epochs 2 --max-length 640 --lora-r 8 --lora-alpha 16 --max-n 6
+```
+
+Stress-test every rule and repair accepted at n<=6 on larger graphs (random G(n,p)
+plus deterministic adversaries: interleaved crown graphs and greedy-adversarial trees):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_generalize --evaluation-file .bcv_runs/graph_repair_hard/proposal_evaluation.json --ns 7 8 --samples-per-np 120 --relabels 3
+```
+
+Build the stress-mined hard dataset, whose repair targets must also survive sampled
+and adversarial graphs at larger n (targets stop being horizon artifacts by construction):
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.graph_repair_data --hard --max-n 6 --max-proposals 48 --heldout-groups 6 --stress-ns 7 8 --root .bcv_runs/graph_repair_hard_stress
+```
+
+Run the first benchmark:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.benchmark
+```
+
+Run every current probe and write ledgers/training candidates:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.experiments
+```
+
+Run only the local-model document probe:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.model_probe
+```
+
+Train the current learned document-corruption tripwire:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.tripwire
+```
+
+Export verifier-ledger training datasets:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.sft_export
+```
+
+Run the cached FastContext 4B QLoRA smoke trainer:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.lora_smoke
+```
+
+The benchmark is deliberately deterministic. It does not prove an LLM will edit safely. It proves the state and verifier layer can distinguish a clean patch from a corrupt full-document rewrite before a model is plugged in.

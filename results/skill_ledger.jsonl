@@ -1,0 +1,14 @@
+{"episodes": 16, "game": "connect4", "opponent": "random", "system": "mc4", "timestamp": "2026-07-02T09:22:26.938129", "winrate": 1.0}
+{"episodes": 16, "game": "connect4", "opponent": "mc4", "system": "mc4", "timestamp": "2026-07-02T09:22:27.436862", "winrate": 0.312}
+{"episodes": 16, "game": "connect4", "opponent": "mc16", "system": "mc4", "timestamp": "2026-07-02T09:22:28.462365", "winrate": 0.25}
+{"episodes": 16, "game": "gomoku", "opponent": "random", "system": "mc4", "timestamp": "2026-07-02T09:22:31.323669", "winrate": 1.0}
+{"episodes": 16, "game": "gomoku", "opponent": "mc4", "system": "mc4", "timestamp": "2026-07-02T09:22:36.542013", "winrate": 0.5}
+{"episodes": 16, "game": "gomoku", "opponent": "mc16", "system": "mc4", "timestamp": "2026-07-02T09:22:46.495450", "winrate": 0.312}
+{"episodes": 16, "game": "othello6", "opponent": "random", "system": "mc4", "timestamp": "2026-07-02T09:23:06.856030", "winrate": 0.875}
+{"episodes": 16, "game": "othello6", "opponent": "mc4", "system": "mc4", "timestamp": "2026-07-02T09:23:08.477333", "winrate": 0.656}
+{"episodes": 16, "game": "othello6", "opponent": "mc16", "system": "mc4", "timestamp": "2026-07-02T09:23:11.518645", "winrate": 0.312}
+{"episodes": 16, "game": "hex7", "opponent": "random", "system": "mc4", "timestamp": "2026-07-02T09:23:19.316578", "winrate": 0.875}
+{"episodes": 16, "game": "hex7", "opponent": "mc4", "system": "mc4", "timestamp": "2026-07-02T09:23:27.652294", "winrate": 0.5}
+{"episodes": 16, "game": "hex7", "opponent": "mc16", "system": "mc4", "timestamp": "2026-07-02T09:23:47.890333", "winrate": 0.062}
+{"episodes": 8, "game": "chess", "opponent": "random", "system": "sf_d1", "timestamp": "2026-07-02T13:30:16.091008", "winrate": 1.0}
+{"episodes": 8, "game": "chess", "opponent": "sf_d4", "system": "sf_d1", "timestamp": "2026-07-02T13:30:16.178377", "winrate": 0.062}

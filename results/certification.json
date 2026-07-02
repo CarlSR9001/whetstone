@@ -1,0 +1,50 @@
+[
+  {
+    "game": "connect4",
+    "skill_mc4_vs_random": 1.0,
+    "depth_mc16_vs_mc4": 0.75,
+    "spam_vs_mc4": 0.1,
+    "first_seat_random": 0.7,
+    "certified": true,
+    "trains": [
+      "tactics",
+      "search_depth"
+    ]
+  },
+  {
+    "game": "gomoku",
+    "skill_mc4_vs_random": 1.0,
+    "depth_mc16_vs_mc4": 0.65,
+    "spam_vs_mc4": 0.5,
+    "first_seat_random": 0.4,
+    "certified": true,
+    "trains": [
+      "tactics",
+      "search_depth"
+    ]
+  },
+  {
+    "game": "othello6",
+    "skill_mc4_vs_random": 0.95,
+    "depth_mc16_vs_mc4": 0.775,
+    "spam_vs_mc4": 0.05,
+    "first_seat_random": 0.55,
+    "certified": true,
+    "trains": [
+      "tactics",
+      "search_depth"
+    ]
+  },
+  {
+    "game": "hex7",
+    "skill_mc4_vs_random": 0.95,
+    "depth_mc16_vs_mc4": 1.0,
+    "spam_vs_mc4": 0.0,
+    "first_seat_random": 0.4,
+    "certified": true,
+    "trains": [
+      "tactics",
+      "search_depth"
+    ]
+  }
+]

@@ -1,0 +1,16 @@
+[project]
+name = "branching-continual-verification"
+version = "0.1.0"
+description = "Cognitive Git runtime and conservation-law editing experiments."
+requires-python = ">=3.11"
+dependencies = [
+  "torch",
+  "transformers",
+  "peft",
+  "bitsandbytes",
+  "sentencepiece",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

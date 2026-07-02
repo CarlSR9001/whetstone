@@ -1,0 +1,25 @@
+{
+  "base_4b_v2": {
+    "by_domain": {
+      "chess": "0/6",
+      "coloring": "0/1",
+      "go": "0/4",
+      "mis": "0/2",
+      "playground": "1/20"
+    },
+    "items": 33,
+    "passed": 1
+  },
+  "gen2": {
+    "by_domain": {
+      "chess": "0/6",
+      "coloring": "0/1",
+      "go": "0/4",
+      "mis": "1/2",
+      "playground": "3/20"
+    },
+    "items": 33,
+    "passed": 4
+  },
+  "retired_saturated": []
+}

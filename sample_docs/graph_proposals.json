@@ -1,0 +1,19 @@
+{
+  "rules": [
+    {
+      "name": "complete_graphs",
+      "description": "Complete graphs should be exact for degree-descending greedy coloring.",
+      "expression": "is_complete"
+    },
+    {
+      "name": "sparse_bipartite",
+      "description": "Bipartite graphs with maximum degree at most two should be exact for degree-descending greedy coloring.",
+      "expression": "is_bipartite and max_degree <= 2"
+    },
+    {
+      "name": "universal_vertex",
+      "description": "Graphs with a universal vertex should be exact for degree-descending greedy coloring.",
+      "expression": "has_universal_vertex"
+    }
+  ]
+}

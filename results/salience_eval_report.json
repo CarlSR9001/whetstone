@@ -1,0 +1,29 @@
+{
+  "nll": {
+    "mean_nll": {
+      "additive_ablation": 1.7049,
+      "no_decay_ablation": 1.711,
+      "novelty_only": 1.654,
+      "recency": 1.597,
+      "salience": 1.5901,
+      "shuffled_surprise": 1.632,
+      "uniform": 1.6546
+    },
+    "model": "Qwen/Qwen3-1.7B",
+    "token_budget": 90,
+    "transitions_scored": 20
+  },
+  "selection": {
+    "selection_f1": {
+      "additive_ablation": 0.3437,
+      "no_decay_ablation": 0.3358,
+      "novelty_only": 0.2094,
+      "recency": 0.2167,
+      "salience": 0.2878,
+      "shuffled_surprise": 0.2808,
+      "uniform": 0.0962
+    },
+    "token_budget": 90,
+    "transitions": 149
+  }
+}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from bcv.examiner import ExamItem, ExaminerBank
 from bcv.gate import (
     GatePolicy, build_gate_report, exact_mcnemar_p_value, latest_grade_event_results, power_statement, write_gate_report,
@@ -61,6 +63,14 @@ def test_gate_holds_weak_gain_and_blocks_regression(tmp_path):
     baseline["i0"] = True
     blocked = build_gate_report(bank, "base", "candidate", baseline, candidate, _retained())
     assert blocked["verdict"] == "BLOCK"
+
+
+def test_gate_rejects_partial_cohorts_instead_of_silently_intersecting_them(tmp_path):
+    bank = _bank(tmp_path, count=3)
+    baseline = {"i0": False, "i1": False}
+    candidate = {"i0": True}
+    with pytest.raises(ValueError, match="same item ids"):
+        build_gate_report(bank, "base", "candidate", baseline, candidate, policy=GatePolicy(require_retained_probe=False))
 
 
 def test_burned_items_never_return_to_promotion_or_training(tmp_path):

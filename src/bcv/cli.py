@@ -179,9 +179,9 @@ def cmd_gate(args, config: dict) -> int:
     candidate_event = latest_grade_event(events_path, args.candidate)
     baseline_results = baseline_event["results"]
     candidate_results = candidate_event["results"]
-    shared = set(baseline_results) & set(candidate_results)
-    if not shared:
-        raise SystemExit("baseline and candidate share no graded items")
+    if set(baseline_results) != set(candidate_results):
+        raise SystemExit("baseline and candidate must be graded on the identical item cohort")
+    shared = set(baseline_results)
     retained = json.loads(Path(args.retained_probe).read_text(encoding="utf-8")) if args.retained_probe else None
     report = build_gate_report(
         bank,

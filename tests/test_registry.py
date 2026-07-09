@@ -42,6 +42,7 @@ def test_mint_and_grade_code_domain_with_stored_answers(tmp_path):
     assert result["passed"] == 1  # one right answer, two missing -> graded false
     assert result["burned"] == []
     assert result["run_manifest"]["answers_file"] == "answers.jsonl"
+    assert len(result["run_manifest"]["item_set_sha256"]) == 64
     assert GOOD_BALANCED not in json.dumps(result["run_manifest"])
 
     reloaded = ExaminerBank(tmp_path / "bank")

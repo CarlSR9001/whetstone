@@ -134,6 +134,11 @@ kind, local endpoint host/model or command hash, token and timeout limits,
 seed, item count, elapsed time, and burn mode. It deliberately excludes exam
 content, answers, API keys, and raw command strings.
 
+Promotion comparison is cohort-strict: the two latest grade events must cover
+the identical private item IDs. Whetstone records a SHA-256 commitment to that
+item set and refuses to silently intersect partial grade runs into an easier
+gate decision.
+
 ## What this layer deliberately does not do
 
 - It does not publish exam items, ever — no CLI or API surface serves them.

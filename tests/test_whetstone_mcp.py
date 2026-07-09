@@ -44,7 +44,7 @@ def test_full_mcp_flow(bank_root):
     bank = ExaminerBank(bank_root)
     by_task = {item.payload["task_id"]: item.item_id for item in bank.promoted_items()}
 
-    base = wmcp.grade_answers_impl("base", {by_task["balanced_brackets"]: "no idea"})
+    base = wmcp.grade_answers_impl("base", {item_id: "no idea" for item_id in by_task.values()})
     assert base["passed"] == 0
     cand = wmcp.grade_answers_impl(
         "cand", {item_id: f"```python\n{GOOD_BALANCED}\n```" for item_id in by_task.values()}

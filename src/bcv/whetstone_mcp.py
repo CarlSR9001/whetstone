@@ -157,9 +157,9 @@ def gate_impl(
     candidate_event = latest_grade_event(events, candidate)
     baseline_results = baseline_event["results"]
     candidate_results = candidate_event["results"]
-    shared = sorted(set(baseline_results) & set(candidate_results))
-    if not shared:
-        raise ValueError("baseline and candidate share no graded items")
+    if set(baseline_results) != set(candidate_results):
+        raise ValueError("baseline and candidate must be graded on the identical item cohort")
+    shared = sorted(baseline_results)
     report = build_gate_report(
         bank,
         baseline=baseline,

@@ -230,6 +230,9 @@ def build_gate_report(
         "policy": asdict(policy),
         "paired_evidence": {
             "items": len(rows),
+            "item_set_sha256": hashlib.sha256(
+                json.dumps(sorted(baseline_results), separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
             "gains": gains,
             "regressions": regressions,
             "ties": ties,

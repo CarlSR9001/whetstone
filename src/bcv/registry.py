@@ -268,6 +268,9 @@ def grade_bank(
         results[item.item_id] = plugin.grade(item, answer, context)
     manifest = candidate_run_manifest(candidate, max_items, stress_ns, seed, burn_external)
     manifest["items_graded"] = len(results)
+    manifest["item_set_sha256"] = hashlib.sha256(
+        json.dumps(sorted(results), separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     manifest["elapsed_seconds"] = round(time.perf_counter() - started, 4)
     bank.record_grades(system, results, run_manifest=manifest)
     burned: list[str] = []

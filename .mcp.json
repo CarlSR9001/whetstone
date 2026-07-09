@@ -2,7 +2,20 @@
   "mcpServers": {
     "reasoning-emulator": {
       "command": "python",
-      "args": ["-m", "bcv.emulator_mcp"],
+      "args": [
+        "-m",
+        "bcv.emulator_mcp"
+      ],
+      "env": {
+        "PYTHONPATH": "src"
+      }
+    },
+    "whetstone": {
+      "command": "python",
+      "args": [
+        "-m",
+        "bcv.whetstone_mcp"
+      ],
       "env": {
         "PYTHONPATH": "src"
       }

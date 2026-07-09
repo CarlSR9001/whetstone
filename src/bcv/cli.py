@@ -66,9 +66,9 @@ def open_bank(args, config: dict) -> ExaminerBank:
 def build_candidate(args):
     from bcv.candidates import CommandCandidate, OpenAICompatibleCandidate, StoredAnswerCandidate
 
-    chosen = [bool(args.answers), bool(args.api_base), bool(args.command)]
+    chosen = [bool(args.answers), bool(args.api_base), bool(args.command), bool(args.acp)]
     if sum(chosen) != 1:
-        raise SystemExit("choose exactly one of --answers, --api-base, --command")
+        raise SystemExit("choose exactly one of --answers, --api-base, --command, --acp")
     if args.answers:
         return StoredAnswerCandidate(args.answers)
     if args.api_base:
@@ -79,6 +79,10 @@ def build_candidate(args):
             base_url=args.api_base, model=args.model, api_key=api_key,
             timeout_seconds=args.timeout,
         )
+    if args.acp:
+        from bcv.acp import ACPCandidate
+
+        return ACPCandidate(shlex.split(args.acp), timeout_seconds=args.timeout)
     return CommandCandidate(shlex.split(args.command), timeout_seconds=args.timeout)
 
 
@@ -130,6 +134,8 @@ def cmd_grade(args, config: dict) -> int:
         seed=int(grading.get("seed", 0)),
         burn_external=not args.allow_external_no_burn,
     )
+    if hasattr(candidate, "close"):
+        candidate.close()
     summary = {key: value for key, value in report.items() if key != "results"}
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
@@ -239,6 +245,16 @@ def cmd_serve(args, config: dict) -> int:
     return 0
 
 
+def cmd_mcp(args, config: dict) -> int:
+    import bcv.whetstone_mcp as whetstone_mcp
+
+    root = args.root or config.get("bank", {}).get("root")
+    if root:
+        whetstone_mcp.use_bank_impl(root)
+    whetstone_mcp.mcp.run()
+    return 0
+
+
 # -------------------------------------------------------------------- parser
 
 
@@ -246,7 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="whetstone", description="The private promotion gate for AI agents.")
     parser.add_argument("--config", help=f"config file (default {DEFAULT_CONFIG} when present)")
     parser.add_argument("--root", help="bank root (overrides config)")
-    sub = parser.add_subparsers(dest="command", required=True)
+    # dest must not be "command": the grade subcommand owns a --command flag,
+    # and argparse would silently overwrite one with the other.
+    sub = parser.add_subparsers(dest="subcommand", required=True)
 
     p_init = sub.add_parser("init", help="scaffold a bank and config")
     p_init.add_argument("--force", action="store_true")
@@ -266,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_grade.add_argument("--model", help="model name for --api-base")
     p_grade.add_argument("--api-key-env", help="environment variable holding the API key")
     p_grade.add_argument("--command", help="shell command: prompt on stdin, answer on stdout")
+    p_grade.add_argument("--acp", help="Agent Client Protocol agent command; whetstone drives it as the ACP client")
     p_grade.add_argument("--max-items", type=int)
     p_grade.add_argument("--timeout", type=float, default=120.0)
     p_grade.add_argument(
@@ -303,6 +322,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--token", help="shared secret; also WHETSTONE_TOKEN env var")
     p_serve.set_defaults(fn=cmd_serve)
 
+    p_mcp = sub.add_parser("mcp", help="run the examiner as an MCP server (stdio)")
+    p_mcp.set_defaults(fn=cmd_mcp)
+
     return parser
 
 
@@ -311,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     # `init --config path` is the bootstrap path for a fresh project/CI
     # workspace. Loading an explicitly named file before init would make it
     # impossible for init to create that file.
-    config = {} if args.command == "init" else load_config(args.config)
+    config = {} if args.subcommand == "init" else load_config(args.config)
     return args.fn(args, config)
 
 

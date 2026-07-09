@@ -74,3 +74,24 @@ release — the receipt for why this version shipped.
   calibrated says so in the item payload, and all-abstain cases fail closed.
 - It does not treat process isolation as a security sandbox; run graders for
   untrusted code inside your existing containment.
+
+## Agent-native surfaces: MCP and ACP
+
+**MCP server** (`bcv/whetstone_mcp.py`, `whetstone mcp`, registered in
+`.mcp.json`) — any MCP client (Claude, an orchestrator, a CI bot) gets the
+gate as tools: `whetstone_status`, `whetstone_mint`, `whetstone_grade_answers`,
+`whetstone_grade_command`, `whetstone_grade_endpoint`, `whetstone_gate`,
+`whetstone_burn`, `whetstone_calibrate_panel`, `whetstone_use_bank`. The trust
+boundary is the same as everywhere else, and it matters more here: an MCP
+client may be (or may be steering) the very system under exam, so NO tool
+returns item prompts or payloads — grading runs server-side, and gate results
+return summaries plus report paths, never item text.
+
+**ACP candidate** (`bcv/acp.py`, `whetstone grade --acp "<agent command>"`) —
+Whetstone speaks the Agent Client Protocol as the client, so any ACP-exposing
+agent (Claude Code, Gemini CLI, custom agents) is a system under exam with
+zero integration work: spawn, handshake, one session, each exam item as a
+prompt turn, chunks reassembled into the graded answer. The grader advertises
+no filesystem or terminal capabilities and answers every permission request
+with "cancelled" — an agent that cannot answer an exam without touching the
+world fails that item honestly.

@@ -27,9 +27,10 @@ whetstone grade --system qwen3 --api-base http://127.0.0.1:11434/v1 `
   --model qwen3:8b --max-tokens 2048
 ```
 
-`results/local_qwen_code_bakeoff.json` records the first local four-item code
-run: qwen2.5-1.5B scored 1/4 and qwen3-8B 2/4; the paired gate held the result
-because one gain is evidence of a difference, not enough evidence to promote.
+`results/local_qwen_code_bakeoff.json` records the first local code runs. On
+the broader eight-item bank, qwen2.5-1.5B scored 4/8 and qwen3-8B 6/8; the
+paired gate held the result because two gains are evidence of a difference, not
+enough evidence to promote.
 
 ## The pieces
 

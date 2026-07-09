@@ -1,17 +1,32 @@
 {
-  "bank": "fresh leakage-clean four-item code bank",
   "candidate_interface": "OpenAI-compatible Ollama endpoint at localhost",
   "completion_budget": 2048,
   "external_exposure": false,
-  "gate": {
-    "gains": 1,
-    "p_value": 1.0,
-    "regressions": 0,
-    "verdict": "HOLD"
+  "eight_item_run": {
+    "bank": "fresh leakage-clean eight-item code bank",
+    "gate": {
+      "gains": 2,
+      "p_value": 0.5,
+      "regressions": 0,
+      "verdict": "HOLD"
+    },
+    "models": {
+      "qwen2.5:1.5b": "4/8",
+      "qwen3:8b": "6/8"
+    }
   },
-  "models": {
-    "qwen2.5:1.5b": "1/4",
-    "qwen3:8b": "2/4"
+  "four_item_pilot": {
+    "bank": "fresh leakage-clean four-item code bank",
+    "gate": {
+      "gains": 1,
+      "p_value": 1.0,
+      "regressions": 0,
+      "verdict": "HOLD"
+    },
+    "models": {
+      "qwen2.5:1.5b": "1/4",
+      "qwen3:8b": "2/4"
+    }
   },
-  "note": "Local-model baseline run on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. This is a local model comparison, not a frontier-model claim."
+  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. These are local model comparisons, not frontier-model claims."
 }

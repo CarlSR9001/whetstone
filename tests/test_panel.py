@@ -9,6 +9,7 @@ from bcv.panel import (
     Check,
     SUPPORT_PANEL,
     VerifierPanel,
+    calibration_admissible,
     calibrate_panel,
     grade_support_answer,
     mint_support_items,
@@ -103,3 +104,12 @@ def test_calibration_persists(tmp_path):
     loaded = json.loads(path.read_text(encoding="utf-8"))
     assert loaded["cases"] == 2
     assert loaded["panel"] == "support_agent_v1"
+
+
+def test_support_panel_admission_refuses_the_measured_hard_failure():
+    hard = Path(__file__).resolve().parent.parent / "results" / "support_hard_panel_baseline.json"
+    assert calibration_admissible(json.loads(hard.read_text(encoding="utf-8"))) is False
+    with pytest.raises(ValueError, match="not admission-calibrated"):
+        mint_support_items([TICKET], calibration_path=hard)
+    research = mint_support_items([TICKET], calibration_path=hard, research_mode=True)
+    assert research[0].payload["research_mode"] is True

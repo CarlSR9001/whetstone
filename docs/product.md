@@ -27,10 +27,11 @@ whetstone grade --system qwen3 --api-base http://127.0.0.1:11434/v1 `
   --model qwen3:8b --max-tokens 2048
 ```
 
-`results/local_qwen_code_bakeoff.json` records the first local code runs. On
-the broader eight-item bank, qwen2.5-1.5B scored 4/8 and qwen3-8B 6/8; the
-paired gate held the result because two gains are evidence of a difference, not
-enough evidence to promote.
+`results/local_qwen_code_bakeoff.json` records the local code runs. After the
+bank grew to 16 independent hidden-check items, qwen2.5-1.5B scored 6/16 and
+qwen3-8B scored 13/16. The paired gate issued **PASS**: seven gains, zero
+regressions, exact p=.015625. This is a reproducible local-model comparison,
+not a frontier-model claim.
 
 ## The pieces
 

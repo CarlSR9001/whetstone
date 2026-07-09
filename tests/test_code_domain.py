@@ -128,3 +128,9 @@ def test_extract_code_prefers_fenced_block():
     raw = "Sure! Here you go:\n```python\ndef f():\n    return 1\n```\nHope that helps."
     assert extract_code(raw) == "def f():\n    return 1"
     assert extract_code("def g():\n    return 2") == "def g():\n    return 2"
+
+
+def test_expanded_code_bank_has_independent_hidden_checker_families():
+    task_ids = {task.task_id for task in CODE_TASKS}
+    assert len(task_ids) >= 16
+    assert {"rotate_right", "sliding_max", "word_counts_ascii", "top_k_frequent"} <= task_ids

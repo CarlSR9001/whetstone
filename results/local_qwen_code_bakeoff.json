@@ -2,6 +2,19 @@
   "candidate_interface": "OpenAI-compatible Ollama endpoint at localhost",
   "completion_budget": 2048,
   "external_exposure": false,
+  "sixteen_item_run": {
+    "bank": "fresh leakage-clean sixteen-item code bank",
+    "gate": {
+      "gains": 7,
+      "p_value": 0.015625,
+      "regressions": 0,
+      "verdict": "PASS"
+    },
+    "models": {
+      "qwen2.5:1.5b": "6/16",
+      "qwen3:8b": "13/16"
+    }
+  },
   "eight_item_run": {
     "bank": "fresh leakage-clean eight-item code bank",
     "gate": {
@@ -28,5 +41,5 @@
       "qwen3:8b": "2/4"
     }
   },
-  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. These are local model comparisons, not frontier-model claims."
+  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. The sixteen-item result is a real paired PASS for this local comparison, not a frontier-model claim or a general capability benchmark."
 }

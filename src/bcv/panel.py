@@ -27,6 +27,8 @@ from typing import Callable, Iterable
 
 from bcv.examiner import ExamItem
 
+DEFAULT_SUPPORT_CALIBRATION = Path(__file__).resolve().parents[2] / "results" / "support_panel_calibration.json"
+
 Verdict = str  # "pass" | "fail" | "abstain"
 
 
@@ -131,6 +133,23 @@ def load_calibration(path: str | Path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def calibration_admissible(
+    calibration: dict | None,
+    min_agreement: float = 0.9,
+    max_false_accepts: int = 0,
+) -> bool:
+    """Whether a panel has earned use as a promotion checker.
+
+    A missing calibration, or one with dangerous false accepts, is not merely a
+    dashboard warning: it is insufficient authority to mint private exam items.
+    """
+    return bool(
+        calibration
+        and calibration.get("agreement", 0.0) >= min_agreement
+        and calibration.get("false_accepts", max_false_accepts + 1) <= max_false_accepts
+    )
+
+
 # ----------------------------------------------------- support-agent panel
 # The demo fuzzy domain: a support agent answers a ticket from a source
 # document under a policy. Every check is cheap, mechanical, and explainable.
@@ -190,12 +209,22 @@ SUPPORT_PANEL = VerifierPanel(
 
 def mint_support_items(
     tickets: list[dict],
-    calibration_path: str | Path | None = None,
+    calibration_path: str | Path | None = DEFAULT_SUPPORT_CALIBRATION,
     max_items: int = 8,
+    research_mode: bool = False,
 ) -> list[ExamItem]:
-    """Support exam items. Refuses to mint from an uncalibrated panel unless the
-    caller explicitly passes calibration_path=None (research mode)."""
+    """Support exam items, admitted only through a calibration gate.
+
+    ``research_mode`` permits an explicitly non-production bank experiment, but
+    callers must opt into it; absence of a trustworthy panel never defaults to
+    a promotion-capable support bank.
+    """
     calibration = load_calibration(calibration_path) if calibration_path else None
+    if not research_mode and not calibration_admissible(calibration):
+        raise ValueError(
+            "support panel is not admission-calibrated; provide a calibration with "
+            "agreement >= 0.9 and zero false accepts, or use research_mode=True"
+        )
     items: list[ExamItem] = []
     for ticket in tickets[:max_items]:
         items.append(
@@ -209,6 +238,7 @@ def mint_support_items(
                     "forbidden": ticket.get("forbidden", []),
                     "panel": SUPPORT_PANEL.name,
                     "calibration": calibration,
+                    "research_mode": research_mode,
                 },
                 oracle=f"verifier_panel:{SUPPORT_PANEL.name}",
                 source="ticket_corpus",

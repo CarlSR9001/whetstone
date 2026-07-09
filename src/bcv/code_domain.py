@@ -226,6 +226,173 @@ def check(ns):
             assert out == ""
 """,
     ),
+    CodeTask(
+        task_id="rotate_right",
+        prompt=(
+            "Define rotate_right(xs: list, k: int) -> list returning a new list rotated right by k "
+            "positions. Negative k rotates left; empty input returns an empty list. Do not mutate xs."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    rotate = ns["rotate_right"]
+    rng = random.Random(29)
+    cases = [([], 0), ([1], 17), ([1, 2, 3], 1), ([1, 2, 3], -1), ([1, 2, 3], 7)]
+    cases += [([rng.randrange(0, 20) for _ in range(rng.randrange(0, 15))], rng.randrange(-40, 41)) for _ in range(50)]
+    for xs, k in cases:
+        original = list(xs)
+        out = rotate(xs, k)
+        expected = [] if not xs else xs[-(k % len(xs)):] + xs[:-(k % len(xs))] if k % len(xs) else list(xs)
+        assert out == expected, f"wrong rotation for {xs}, {k}"
+        assert xs == original, "mutated input"
+""",
+    ),
+    CodeTask(
+        task_id="first_index",
+        prompt=(
+            "Define first_index(xs: list[int], target: int) -> int for a nondecreasing sorted list. "
+            "Return the first index containing target, or -1 if target is absent."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    first = ns["first_index"]
+    rng = random.Random(31)
+    cases = [([], 0), ([1], 1), ([1, 1, 1], 1), ([1, 2, 4], 3)]
+    for _ in range(60):
+        xs = sorted(rng.randrange(0, 12) for _ in range(rng.randrange(0, 35)))
+        cases.append((xs, rng.randrange(0, 12)))
+    for xs, target in cases:
+        expected = xs.index(target) if target in xs else -1
+        assert first(list(xs), target) == expected, f"wrong first index for {xs}, {target}"
+""",
+    ),
+    CodeTask(
+        task_id="transpose_rect",
+        prompt=(
+            "Define transpose_rect(matrix: list[list]) -> list[list] for a rectangular matrix. "
+            "Return its transpose; both [] and matrices with zero columns transpose to []. Do not mutate matrix."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    transpose = ns["transpose_rect"]
+    rng = random.Random(37)
+    cases = [[], [[]], [[], []], [[1, 2, 3]], [[1], [2], [3]]]
+    for _ in range(40):
+        rows, cols = rng.randrange(0, 7), rng.randrange(0, 7)
+        cases.append([[rng.randrange(-9, 10) for _ in range(cols)] for _ in range(rows)])
+    for matrix in cases:
+        original = [list(row) for row in matrix]
+        expected = [] if not matrix or not matrix[0] else [list(column) for column in zip(*matrix)]
+        assert transpose(matrix) == expected, f"wrong transpose for {matrix}"
+        assert matrix == original, "mutated input"
+""",
+    ),
+    CodeTask(
+        task_id="sliding_max",
+        prompt=(
+            "Define sliding_max(xs: list[int], width: int) -> list[int] returning the maximum of each "
+            "contiguous window of width. Return [] when width is nonpositive or larger than len(xs)."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    sliding = ns["sliding_max"]
+    rng = random.Random(41)
+    cases = [([], 1), ([1], 1), ([1], 2), ([1, 3, 2, 5, 4], 3), ([2, 2, 2], 2)]
+    cases += [([rng.randrange(-20, 21) for _ in range(rng.randrange(0, 30))], rng.randrange(-2, 34)) for _ in range(60)]
+    for xs, width in cases:
+        expected = [] if width <= 0 or width > len(xs) else [max(xs[i:i + width]) for i in range(len(xs) - width + 1)]
+        assert sliding(list(xs), width) == expected, f"wrong sliding max for {xs}, {width}"
+""",
+    ),
+    CodeTask(
+        task_id="is_prime",
+        prompt="Define is_prime(n: int) -> bool. It returns True exactly for prime integers greater than one.",
+        checker_source="""
+import random
+def check(ns):
+    prime = ns["is_prime"]
+    def oracle(n):
+        if n < 2: return False
+        divisor = 2
+        while divisor * divisor <= n:
+            if n % divisor == 0: return False
+            divisor += 1
+        return True
+    rng = random.Random(43)
+    cases = list(range(-5, 100)) + [rng.randrange(0, 10000) for _ in range(80)]
+    for n in cases:
+        assert prime(n) == oracle(n), f"wrong primality for {n}"
+""",
+    ),
+    CodeTask(
+        task_id="stable_partition_even",
+        prompt=(
+            "Define stable_partition_even(xs: list[int]) -> tuple[list[int], list[int]] returning the even "
+            "values then odd values, preserving original order within each list. Do not mutate xs."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    partition = ns["stable_partition_even"]
+    rng = random.Random(47)
+    cases = [[], [1], [2], [3, 2, 4, 1, 6]]
+    cases += [[rng.randrange(-20, 21) for _ in range(rng.randrange(0, 30))] for _ in range(60)]
+    for xs in cases:
+        original = list(xs)
+        expected = ([x for x in xs if x % 2 == 0], [x for x in xs if x % 2 != 0])
+        assert partition(xs) == expected, f"wrong stable partition for {xs}"
+        assert xs == original, "mutated input"
+""",
+    ),
+    CodeTask(
+        task_id="word_counts_ascii",
+        prompt=(
+            "Define word_counts_ascii(text: str) -> dict[str, int]. A word is one or more ASCII letters; "
+            "count words case-insensitively and ignore all other characters."
+        ),
+        checker_source="""
+import random, re
+def check(ns):
+    counts = ns["word_counts_ascii"]
+    def oracle(text):
+        out = {}
+        for word in re.findall(r"[A-Za-z]+", text.lower()): out[word] = out.get(word, 0) + 1
+        return out
+    rng = random.Random(53)
+    alphabet = "AbC xyz-123_!?"
+    cases = ["", "Hello, hello!", "can't STOP 42 times", "a_A a"]
+    cases += ["".join(rng.choice(alphabet) for _ in range(rng.randrange(0, 100))) for _ in range(50)]
+    for text in cases:
+        assert counts(text) == oracle(text), f"wrong word counts for {text!r}"
+""",
+    ),
+    CodeTask(
+        task_id="top_k_frequent",
+        prompt=(
+            "Define top_k_frequent(xs: list[int], k: int) -> list[int] returning up to k distinct values "
+            "ordered by decreasing frequency; ties break by the value's first occurrence in xs. Nonpositive k returns []."
+        ),
+        checker_source="""
+import random
+def check(ns):
+    top = ns["top_k_frequent"]
+    def oracle(xs, k):
+        if k <= 0: return []
+        counts, first = {}, {}
+        for index, value in enumerate(xs):
+            counts[value] = counts.get(value, 0) + 1
+            first.setdefault(value, index)
+        return sorted(counts, key=lambda value: (-counts[value], first[value]))[:k]
+    rng = random.Random(59)
+    cases = [([], 2), ([1, 2, 2, 1, 3], 2), ([4, 4, 4], 0)]
+    cases += [([rng.randrange(0, 8) for _ in range(rng.randrange(0, 35))], rng.randrange(-2, 12)) for _ in range(60)]
+    for xs, k in cases:
+        assert top(list(xs), k) == oracle(xs, k), f"wrong top-k for {xs}, {k}"
+""",
+    ),
 )
 
 TASKS_BY_ID = {task.task_id: task for task in CODE_TASKS}

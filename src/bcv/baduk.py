@@ -26,17 +26,19 @@ CONFIG = KATAGO_DIR / "default_gtp.cfg"
 
 
 class GTPEngine:
-    def __init__(self, max_visits: int):
+    def __init__(self, max_visits: int, katago_dir: str | Path = KATAGO_DIR):
+        katago_dir = Path(katago_dir)
         self.process = subprocess.Popen(
             [
-                str(KATAGO), "gtp", "-model", str(NET), "-config", str(CONFIG),
+                str(katago_dir / "katago.exe"), "gtp", "-model", str(katago_dir / "net-b6c96.txt.gz"),
+                "-config", str(katago_dir / "default_gtp.cfg"),
                 "-override-config", f"maxVisits={max_visits}",
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            cwd=str(KATAGO_DIR.parent.parent),
+            cwd=str(katago_dir.parent.parent),
         )
 
     def send(self, command: str) -> str:
@@ -61,10 +63,11 @@ class GTPEngine:
 
 
 def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
-                      oracle_visits: int = 48, seed: int = 0) -> list[dict]:
+                      oracle_visits: int = 48, seed: int = 0,
+                      katago_dir: str | Path = KATAGO_DIR) -> list[dict]:
     rng = random.Random(seed)
-    shallow = GTPEngine(shallow_visits)
-    oracle = GTPEngine(oracle_visits)
+    shallow = GTPEngine(shallow_visits, katago_dir)
+    oracle = GTPEngine(oracle_visits, katago_dir)
     rows: list[dict] = []
     try:
         for engine in (shallow, oracle):
@@ -105,10 +108,12 @@ def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
     return rows
 
 
-def mint_go_exam_items(rows: list[dict], per_bank: int = 4) -> int:
+def mint_go_exam_items(
+    rows: list[dict], per_bank: int = 4, bank_root: str | Path | None = None
+) -> int:
     from bcv.examiner import ExamItem, ExaminerBank
 
-    bank = ExaminerBank()
+    bank = ExaminerBank(bank_root) if bank_root else ExaminerBank()
     added = 0
     frontier = [row for row in rows if row["oracle_move"] != row["shallow_move"]]
     for row in frontier[:per_bank]:
@@ -139,10 +144,14 @@ def main() -> None:
     parser.add_argument("--mill", type=int, default=12)
     parser.add_argument("--mint-exams", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--katago-dir", default=str(KATAGO_DIR))
+    parser.add_argument("--root", default=".bcv_runs/go", help="experience output directory")
+    parser.add_argument("--bank-root", help="optional isolated bank to receive minted exam items")
+    parser.add_argument("--per-bank", type=int, default=4)
     args = parser.parse_args()
-    root = Path(".bcv_runs/go")
+    root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
-    rows = mill_go_positions(args.mill, seed=args.seed)
+    rows = mill_go_positions(args.mill, seed=args.seed, katago_dir=args.katago_dir)
     (root / "experience.jsonl").write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8"
     )
@@ -153,7 +162,7 @@ def main() -> None:
         ),
     }
     if args.mint_exams:
-        output["exam_items_promoted"] = mint_go_exam_items(rows)
+        output["exam_items_promoted"] = mint_go_exam_items(rows, args.per_bank, args.bank_root)
     print(json.dumps(output, indent=2, sort_keys=True))
 
 

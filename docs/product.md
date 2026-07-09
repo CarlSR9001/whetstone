@@ -53,6 +53,20 @@ and a toy memorizer's six leaked-item wins would have produced an unsafe PASS,
 while the protected bank issued HOLD. It is evidence for these attacks, not a
 claim that the leakage defense is complete.
 
+The former chess/Go volume ceiling has been addressed in a separate private
+engine bank. `results/engine_volume_receipt.json` records 17 Stockfish frontier
+items and 47 KataGo frontier items (64 total, zero exposure). These are new
+capacity, not scores: no candidate has yet been graded on that bank. The mills
+now accept explicit tool and bank paths, so they can run without copying
+gitignored engines into a worktree:
+
+```powershell
+python -m bcv.grandmaster --mill 500 --mint-exams --per-bank 500 `
+  --engine-path "C:\path\to\stockfish.exe" --root .bcv_runs/chess_mill --bank-root .bcv_runs/engine_bank
+python -m bcv.baduk --mill 100 --mint-exams --per-bank 100 `
+  --katago-dir "C:\path\to\katago" --root .bcv_runs/go_mill --bank-root .bcv_runs/engine_bank
+```
+
 Code-bank minting now selects a reproducible shuffled library slice from
 `--seed`, rather than always taking a fixed prefix. A new seed-4, 12-item
 cohort included four previously untested families (islands, Sudoku validity,

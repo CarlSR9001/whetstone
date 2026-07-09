@@ -1,0 +1,24 @@
+{
+  "evidence_scope": "isolated local engine milling, 2026-07-09",
+  "engines": {
+    "chess": "Stockfish 18, one thread, d12 oracle versus d2 shallow policy",
+    "go": "KataGo 1.16.5 OpenCL, v48 oracle versus v2 shallow policy"
+  },
+  "isolated_bank": {
+    "burned": 0,
+    "go_promoted": 47,
+    "promoted_total": 64,
+    "quarantined": 0,
+    "chess_promoted": 17
+  },
+  "milling": {
+    "chess": [
+      {"frontier_rate": 0.02, "milled": 50, "promoted": 1, "seed": 11},
+      {"frontier_rate": 0.032, "milled": 500, "promoted": 16, "seed": 19}
+    ],
+    "go": [
+      {"frontier_rate": 0.47, "milled": 100, "promoted": 47, "seed": 23}
+    ]
+  },
+  "note": "Capacity expansion only: no candidate has been graded on this fresh private engine bank. The receipt intentionally omits FENs, move histories, engine moves, and item IDs."
+}

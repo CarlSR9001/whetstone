@@ -146,10 +146,12 @@ def mill_positions(
     return rows
 
 
-def mint_chess_exam_items(rows: list[dict], per_bank: int = 6) -> int:
+def mint_chess_exam_items(
+    rows: list[dict], per_bank: int = 6, bank_root: str | Path | None = None
+) -> int:
     from bcv.examiner import ExamItem, ExaminerBank
 
-    bank = ExaminerBank()
+    bank = ExaminerBank(bank_root) if bank_root else ExaminerBank()
     added = 0
     frontier = [row for row in rows if row["oracle_move"] != row["shallow_move"]]
     for row in frontier[:per_bank]:
@@ -211,15 +213,19 @@ def main() -> None:
     parser.add_argument("--ledger", action="store_true")
     parser.add_argument("--episodes", type=int, default=12)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--engine-path", default=str(STOCKFISH))
+    parser.add_argument("--root", default=".bcv_runs/chess", help="experience output directory")
+    parser.add_argument("--bank-root", help="optional isolated bank to receive minted exam items")
+    parser.add_argument("--per-bank", type=int, default=6)
     args = parser.parse_args()
-    root = Path(".bcv_runs/chess")
+    root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
     output: dict = {}
     if args.fingerprint:
-        output["fingerprint"] = fingerprint(args.episodes, args.seed)
+        output["fingerprint"] = fingerprint(args.episodes, args.seed, args.engine_path)
     rows: list[dict] = []
     if args.mill:
-        rows = mill_positions(args.mill, seed=args.seed)
+        rows = mill_positions(args.mill, seed=args.seed, engine_path=args.engine_path)
         (root / "experience.jsonl").write_text(
             "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8"
         )
@@ -228,9 +234,9 @@ def main() -> None:
             sum(1 for r in rows if r["oracle_move"] != r["shallow_move"]) / max(1, len(rows)), 3
         )
     if args.mint_exams and rows:
-        output["exam_items_promoted"] = mint_chess_exam_items(rows)
+        output["exam_items_promoted"] = mint_chess_exam_items(rows, args.per_bank, args.bank_root)
     if args.ledger:
-        output["ledger_entries"] = ledger_entries(args.seed)
+        output["ledger_entries"] = ledger_entries(args.seed, engine_path=args.engine_path)
     print(json.dumps(output, indent=2, sort_keys=True))
 
 

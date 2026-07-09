@@ -1,0 +1,14 @@
+{
+  "abstention_rate": 0.0357,
+  "agreement": 1.0,
+  "cases": 14,
+  "false_accepts": 0,
+  "false_rejects": 0,
+  "panel": "support_agent_v1",
+  "per_check_fail_counts": {
+    "grounded_in_source": 6,
+    "no_invented_numbers": 5,
+    "policy_compliant": 3,
+    "substantive_reply": 1
+  }
+}

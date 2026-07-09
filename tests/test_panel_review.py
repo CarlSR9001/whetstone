@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from bcv.panel_review import adjudicate_review_labels, export_blind_review_queue
+from bcv.panel_review import adjudicate_review_labels, export_blind_review_queue, write_vote_templates
 
 
 def _write_jsonl(path, rows):
@@ -52,3 +52,16 @@ def test_adjudication_rejects_duplicate_reviewer_identity(tmp_path):
     _write_jsonl(second, [{"reviewer_id": "same", "review_id": identifier, "verdict": "pass"}])
     with pytest.raises(ValueError, match="duplicate reviewer_id"):
         adjudicate_review_labels(queue, [first, second], tmp_path / "out", tmp_path / "bad")
+
+
+def test_vote_templates_are_blank_and_bound_to_distinct_reviewers(tmp_path):
+    source = tmp_path / "source.jsonl"
+    _write_jsonl(source, [{"case": {"source": "A", "question": "Q"}, "answer": "Answer A", "human_pass": True}])
+    queue = tmp_path / "queue.jsonl"
+    export_blind_review_queue(source, queue)
+    result = write_vote_templates(queue, ["reviewer-a", "reviewer-b"], tmp_path / "ballots")
+    first = [json.loads(line) for line in (tmp_path / "ballots" / "reviewer-a.votes.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert result["cases"] == 1
+    assert first == [{"review_id": first[0]["review_id"], "reviewer_id": "reviewer-a", "verdict": ""}]
+    with pytest.raises(ValueError, match="distinct"):
+        write_vote_templates(queue, ["same", "same"], tmp_path / "bad")

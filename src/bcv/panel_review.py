@@ -56,6 +56,33 @@ def export_blind_review_queue(source: str | Path, output: str | Path) -> dict:
     return {"queue": str(destination), "cases": len(exported), "queue_sha256": _sha256(destination)}
 
 
+def write_vote_templates(
+    queue: str | Path, reviewer_ids: Iterable[str], output_dir: str | Path
+) -> dict:
+    """Create one empty, reviewer-bound JSONL ballot per reviewer.
+
+    Templates contain only stable review IDs and blank verdicts; distribute the
+    blind queue separately, never a file containing a prior label or another
+    reviewer's decision.
+    """
+    queue_rows = _jsonl(queue)
+    identifiers = [row.get("review_id") for row in queue_rows]
+    if not identifiers or len(set(identifiers)) != len(identifiers) or any(not isinstance(item, str) for item in identifiers):
+        raise ValueError("queue contains missing or duplicate review_id values")
+    reviewers = [str(reviewer).strip() for reviewer in reviewer_ids]
+    if not reviewers or any(not reviewer for reviewer in reviewers) or len(set(reviewers)) != len(reviewers):
+        raise ValueError("reviewer IDs must be non-empty and distinct")
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    templates: dict[str, str] = {}
+    for reviewer in reviewers:
+        path = destination / f"{reviewer}.votes.jsonl"
+        rows = [{"reviewer_id": reviewer, "review_id": identifier, "verdict": ""} for identifier in identifiers]
+        path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+        templates[reviewer] = str(path)
+    return {"queue": str(queue), "queue_sha256": _sha256(Path(queue)), "cases": len(identifiers), "templates": templates}
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

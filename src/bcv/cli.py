@@ -283,9 +283,13 @@ def cmd_calibrate_panel(args, config: dict) -> int:
 
 
 def cmd_panel_export(args, config: dict) -> int:
-    from bcv.panel_review import export_blind_review_queue
+    from bcv.panel_review import export_blind_review_queue, write_vote_templates
 
     report = export_blind_review_queue(args.source, args.out)
+    if bool(args.reviewers) != bool(args.templates_dir):
+        raise SystemExit("--reviewers and --templates-dir must be used together")
+    if args.reviewers:
+        report["vote_templates"] = write_vote_templates(args.out, args.reviewers, args.templates_dir)
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
@@ -458,6 +462,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_export = sub.add_parser("panel-export", help="write an unlabeled review queue for independent human calibration")
     p_export.add_argument("--source", required=True, help="JSONL rows with case and answer; any existing labels are stripped")
     p_export.add_argument("--out", required=True, help="unlabeled review queue JSONL")
+    p_export.add_argument("--reviewers", nargs="+", help="distinct reviewer IDs for empty vote templates")
+    p_export.add_argument("--templates-dir", help="directory for per-reviewer blank vote JSONL files")
     p_export.set_defaults(fn=cmd_panel_export)
 
     p_adjudicate = sub.add_parser("panel-adjudicate", help="produce calibration rows only from unanimous reviewer votes")

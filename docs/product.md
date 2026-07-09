@@ -119,6 +119,11 @@ agree; missing and split votes go to a separate disagreement file. This is an
 auditable intake mechanism, not a claim that two reviewer IDs prove human
 independence.
 
+Use `panel-export --reviewers reviewer-a reviewer-b --templates-dir ballots`
+to create separate blank vote templates; each reviewer receives the same blind
+queue plus only their own ballot. After both verdict fields are filled with
+`pass` or `fail`, submit those files to `panel-adjudicate`.
+
 **The service** (`bcv/service.py`, `whetstone serve`) — GET /status,
 POST /grade, POST /gate over localhost JSON. It accepts answers, never model
 endpoints, so it cannot be tricked into shipping private prompts to an

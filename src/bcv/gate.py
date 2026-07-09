@@ -94,7 +94,7 @@ def bank_hash(bank: ExaminerBank) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def latest_grade_event_results(path: str | Path, system: str) -> dict[str, bool]:
+def latest_grade_event(path: str | Path, system: str) -> dict:
     """Load the latest complete item-level grade event for one system."""
     path = Path(path)
     if not path.exists():
@@ -108,8 +108,12 @@ def latest_grade_event_results(path: str | Path, system: str) -> dict[str, bool]
         results = event.get("results")
         if not isinstance(results, dict) or not all(isinstance(item_id, str) and isinstance(passed, bool) for item_id, passed in results.items()):
             raise ValueError(f"malformed grade event for {system}")
-        return results
+        return event
     raise ValueError(f"no grade event found for {system} in {path}")
+
+
+def latest_grade_event_results(path: str | Path, system: str) -> dict[str, bool]:
+    return latest_grade_event(path, system)["results"]
 
 
 def file_sha256(path: Path) -> str | None:
@@ -144,6 +148,7 @@ def build_gate_report(
     candidate_results: dict[str, bool],
     retained_probe: dict[str, Any] | None = None,
     policy: GatePolicy = GatePolicy(),
+    grade_runs: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
     if set(baseline_results) != set(candidate_results):
         raise ValueError("baseline and candidate must be graded on the same item ids")
@@ -235,6 +240,7 @@ def build_gate_report(
             "regression_reliability": regression_reliability,
         },
         "retained_probe": retained,
+        "grade_runs": grade_runs or {},
         "bank": {
             "sha256": bank_hash(bank),
             "grade_events_sha256": file_sha256(bank.root / "grade_events.jsonl"),
@@ -247,6 +253,7 @@ def render_gate_html(report: dict[str, Any]) -> str:
     evidence = report["paired_evidence"]
     resolution = evidence["resolution"]
     retained = report.get("retained_probe") or {}
+    grade_runs = html.escape(json.dumps(report.get("grade_runs", {}), indent=2, sort_keys=True))
     reasons = "<br>".join(html.escape(reason) for reason in report["reasons"])
     domain_rows = "".join(
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
@@ -263,6 +270,7 @@ def render_gate_html(report: dict[str, Any]) -> str:
 <p>{evidence["gains"]} gains, {evidence["regressions"]} regressions, {evidence["ties"]} ties across {evidence["items"]} items.<br>Exact two-sided McNemar p = <strong>{evidence["exact_mcnemar_two_sided_p"]:.6g}</strong>.</p>
 <h2>Instrument resolution</h2><p>At alpha={resolution["alpha"]:.6g}, a clean paired result needs {resolution["minimum_clean_discordant_wins"]} discordant wins and zero regressions. This bank observed {resolution["observed_discordant_items"]} discordant items; even if all were clean wins, p would be {resolution["best_case_p_if_observed_discordants_were_all_clean"]:.6g}. It needs {resolution["additional_clean_discriminators_needed_if_current_outcomes_were_clean"]} more independent clean discriminator(s) to make that best case certifiable.</p>
 <h2>Retained probe</h2><p>{retained.get("candidate_verified", "n/a")}/{retained.get("items", "n/a")} candidate verified vs {retained.get("base_verified", "n/a")}/{retained.get("items", "n/a")} baseline; delta {retained.get("delta", "n/a")}.</p>
+<h2>Grading-run provenance</h2><pre>{grade_runs}</pre>
 <h2>Domain evidence</h2><table><tr><th>domain</th><th>items</th><th>gains</th><th>regressions</th><th>ties</th></tr>{domain_rows}</table>
 <h2>Audit commitment</h2><p>Private bank SHA-256: <code>{report["bank"]["sha256"]}</code></p></body></html>"""
 

@@ -166,7 +166,9 @@ class ExaminerBank:
         """Retired exams become student fuel (the downward pipeline's mouth)."""
         return [asdict(item) for item in self.items.values() if item.status == "retired"]
 
-    def record_grades(self, system: str, results: dict[str, bool]) -> None:
+    def record_grades(
+        self, system: str, results: dict[str, bool], run_manifest: dict | None = None
+    ) -> None:
         for item_id, passed in results.items():
             item = self.items[item_id]
             stats = item.graded.setdefault(system, {"pass": 0, "fail": 0})
@@ -180,6 +182,8 @@ class ExaminerBank:
             "system": system,
             "results": results,
         }
+        if run_manifest is not None:
+            event["run_manifest"] = run_manifest
         with (self.root / "grade_events.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, sort_keys=True) + "\n")
 

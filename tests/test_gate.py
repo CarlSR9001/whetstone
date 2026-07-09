@@ -38,12 +38,17 @@ def test_gate_passes_only_with_paired_confidence_and_retained_probe(tmp_path):
     bank = _bank(tmp_path)
     baseline = {item_id: False for item_id in bank.items}
     candidate = {item_id: True for item_id in bank.items}
-    report = build_gate_report(bank, "base", "candidate", baseline, candidate, _retained())
+    report = build_gate_report(
+        bank, "base", "candidate", baseline, candidate, _retained(),
+        grade_runs={"baseline": {"adapter": "fixture"}, "candidate": {"adapter": "fixture", "seed": 7}},
+    )
     assert report["verdict"] == "PASS"
     assert report["paired_evidence"]["exact_mcnemar_two_sided_p"] == 0.03125
     json_path, html_path = write_gate_report(report, tmp_path / "report")
     assert json_path.exists() and html_path.exists()
     assert "Private bank SHA-256" in html_path.read_text(encoding="utf-8")
+    assert report["grade_runs"]["candidate"]["seed"] == 7
+    assert "Grading-run provenance" in html_path.read_text(encoding="utf-8")
 
 
 def test_gate_holds_weak_gain_and_blocks_regression(tmp_path):

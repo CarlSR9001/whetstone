@@ -17,6 +17,8 @@ deployment checklist.
 from __future__ import annotations
 
 import json
+import hashlib
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
@@ -189,6 +191,44 @@ def mint_domain(
     return {"domain": domain, "minted": len(minted), "promoted": promoted, "quarantined": quarantined}
 
 
+def candidate_run_manifest(
+    candidate: Candidate,
+    max_items: int | None,
+    stress_ns: tuple[int, ...],
+    seed: int,
+    burn_external: bool,
+) -> dict:
+    """Non-secret receipt for a grading run.
+
+    The ledger must be reproducible without copying prompts, answers, API keys,
+    or a command line that might itself contain credentials.
+    """
+    manifest: dict = {
+        "adapter": type(candidate).__name__,
+        "backend": str(getattr(candidate, "backend", "unknown")),
+        "external": bool(candidate.is_external),
+        "max_items": max_items,
+        "stress_ns": list(stress_ns),
+        "seed": seed,
+        "temperature": 0.0,
+        "burn_external": burn_external,
+    }
+    if hasattr(candidate, "model") and hasattr(candidate, "host"):
+        manifest.update({
+            "endpoint_host": str(candidate.host),
+            "model": str(candidate.model),
+            "max_tokens": int(getattr(candidate, "max_tokens", 0)),
+            "timeout_seconds": float(getattr(candidate, "timeout_seconds", 0.0)),
+        })
+    elif hasattr(candidate, "argv"):
+        command = "\0".join(str(part) for part in candidate.argv)
+        manifest["command_sha256"] = hashlib.sha256(command.encode("utf-8")).hexdigest()
+        manifest["timeout_seconds"] = float(getattr(candidate, "timeout_seconds", 0.0))
+    elif hasattr(candidate, "path"):
+        manifest["answers_file"] = Path(candidate.path).name
+    return manifest
+
+
 # ------------------------------------------------------------------ grading
 
 
@@ -210,6 +250,7 @@ def grade_bank(
     """
     from bcv.candidates import StoredAnswerCandidate
 
+    started = time.perf_counter()
     context: dict = {"stress_ns": stress_ns, "seed": seed, "scratch": str(bank.root / "registry_tmp")}
     items = bank.promoted_items()
     if max_items:
@@ -225,7 +266,10 @@ def grade_bank(
             if candidate.is_external:
                 exposed.append(item.item_id)
         results[item.item_id] = plugin.grade(item, answer, context)
-    bank.record_grades(system, results)
+    manifest = candidate_run_manifest(candidate, max_items, stress_ns, seed, burn_external)
+    manifest["items_graded"] = len(results)
+    manifest["elapsed_seconds"] = round(time.perf_counter() - started, 4)
+    bank.record_grades(system, results, run_manifest=manifest)
     burned: list[str] = []
     if exposed and burn_external:
         for item_id in exposed:
@@ -239,5 +283,6 @@ def grade_bank(
         "passed": sum(results.values()),
         "external": bool(exposed),
         "burned": burned,
+        "run_manifest": manifest,
         "results": results,
     }

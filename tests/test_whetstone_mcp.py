@@ -55,6 +55,8 @@ def test_full_mcp_flow(bank_root):
     assert verdict["verdict"] in ("PASS", "HOLD", "BLOCK")
     assert "resolution" in verdict
     assert verdict["gains"] >= 1
+    reliability = wmcp.gate_impl("base", "cand", regression_policy="reliability_aware")
+    assert reliability["verdict"] in ("PASS", "HOLD", "BLOCK")
 
     burn = wmcp.burn_impl(by_task["balanced_brackets"], "manual", "test exposure")
     assert wmcp.status_impl()["buckets"]["burned"] == 1

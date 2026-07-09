@@ -21,6 +21,7 @@ Design boundaries, stated rather than implied:
 from __future__ import annotations
 
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def grade_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
         "seed": int(grading.get("seed", 0)),
         "scratch": str(bank.root / "registry_tmp"),
     }
+    started = time.perf_counter()
     results: dict[str, bool] = {}
     unknown: list[str] = []
     for item in bank.promoted_items():
@@ -67,7 +69,16 @@ def grade_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
     unknown = sorted(set(answers) - set(results))
     if not results:
         raise ValueError("no submitted answers matched promoted items")
-    bank.record_grades(system, results)
+    manifest = {
+        "adapter": "submitted_answers",
+        "backend": "http_service",
+        "external": False,
+        "items_graded": len(results),
+        "stress_ns": list(context["stress_ns"]),
+        "seed": context["seed"],
+        "elapsed_seconds": round(time.perf_counter() - started, 4),
+    }
+    bank.record_grades(system, results, run_manifest=manifest)
     bank.save()
     return {
         "system": system,
@@ -75,11 +86,12 @@ def grade_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
         "passed": sum(results.values()),
         "results": results,
         "ignored_unknown_items": unknown,
+        "run_manifest": manifest,
     }
 
 
 def gate_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
-    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event_results
+    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event
 
     baseline = body.get("baseline")
     candidate = body.get("candidate")
@@ -91,10 +103,16 @@ def gate_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
         max_regressions=int(policy_config.get("max_regressions", 0)),
         confidence_alpha=float(policy_config.get("confidence_alpha", 0.05)),
         require_retained_probe=bool(policy_config.get("require_retained_probe", False)),
+        regression_policy=str(policy_config.get("regression_policy", "strict")),
+        max_noisy_regressions=int(policy_config.get("max_noisy_regressions", 1)),
+        reliability_min_observations=int(policy_config.get("reliability_min_observations", 3)),
+        stable_flip_rate=float(policy_config.get("stable_flip_rate", 0.05)),
     )
     events = bank.root / "grade_events.jsonl"
-    baseline_results = latest_grade_event_results(events, baseline)
-    candidate_results = latest_grade_event_results(events, candidate)
+    baseline_event = latest_grade_event(events, baseline)
+    candidate_event = latest_grade_event(events, candidate)
+    baseline_results = baseline_event["results"]
+    candidate_results = candidate_event["results"]
     shared = sorted(set(baseline_results) & set(candidate_results))
     if not shared:
         raise ValueError("baseline and candidate share no graded items")
@@ -106,6 +124,10 @@ def gate_payload(bank: ExaminerBank, body: dict, config: dict) -> dict:
         candidate_results={item: candidate_results[item] for item in shared},
         retained_probe=body.get("retained_probe"),
         policy=policy,
+        grade_runs={
+            "baseline": baseline_event.get("run_manifest", {}),
+            "candidate": candidate_event.get("run_manifest", {}),
+        },
     )
     report["paired_evidence"].pop("items_detail", None)  # keep item ids off the wire
     return report

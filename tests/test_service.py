@@ -76,11 +76,13 @@ def test_grade_and_gate_over_http(server, tmp_path):
     cand = _call(server, "/grade", {"system": "cand", "answers": {item_id: GOOD_ANSWER, "bogus": "x"}})
     assert cand["passed"] == 1
     assert cand["ignored_unknown_items"] == ["bogus"]
+    assert cand["run_manifest"]["adapter"] == "submitted_answers"
 
     gate = _call(server, "/gate", {"baseline": "base", "candidate": "cand"})
     assert gate["verdict"] in ("PASS", "HOLD")  # 1 gain, 0 regressions: HOLD at default alpha
     assert gate["verdict"] == "HOLD"
     assert "items_detail" not in gate["paired_evidence"]  # item ids stay off the wire
+    assert gate["grade_runs"]["candidate"]["backend"] == "http_service"
 
     relaxed = _call(server, "/gate", {"baseline": "base", "candidate": "cand", "policy": {"confidence_alpha": 1.0}})
     assert relaxed["verdict"] == "PASS"

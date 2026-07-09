@@ -148,7 +148,7 @@ def cmd_grade(args, config: dict) -> int:
 
 
 def cmd_gate(args, config: dict) -> int:
-    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event_results, write_gate_report
+    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event, write_gate_report
 
     bank = open_bank(args, config)
     policy_config = dict(config.get("policy", {}))
@@ -175,8 +175,10 @@ def cmd_gate(args, config: dict) -> int:
         ),
     )
     events_path = bank.root / "grade_events.jsonl"
-    baseline_results = latest_grade_event_results(events_path, args.baseline)
-    candidate_results = latest_grade_event_results(events_path, args.candidate)
+    baseline_event = latest_grade_event(events_path, args.baseline)
+    candidate_event = latest_grade_event(events_path, args.candidate)
+    baseline_results = baseline_event["results"]
+    candidate_results = candidate_event["results"]
     shared = set(baseline_results) & set(candidate_results)
     if not shared:
         raise SystemExit("baseline and candidate share no graded items")
@@ -189,6 +191,10 @@ def cmd_gate(args, config: dict) -> int:
         candidate_results={item: candidate_results[item] for item in sorted(shared)},
         retained_probe=retained,
         policy=policy,
+        grade_runs={
+            "baseline": baseline_event.get("run_manifest", {}),
+            "candidate": candidate_event.get("run_manifest", {}),
+        },
     )
     out_dir = args.out or str(bank.root / f"gate_{args.candidate}")
     json_path, html_path = write_gate_report(report, out_dir)

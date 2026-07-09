@@ -128,6 +128,12 @@ from one on a measured noisy item (an explicit budget) or an item with too
 little history (HOLD). The report records both the selected policy and its
 per-item reliability evidence.
 
+New CLI, HTTP, command, ACP, and endpoint grade events also carry a
+non-secret run manifest into the append-only ledger and gate report: adapter
+kind, local endpoint host/model or command hash, token and timeout limits,
+seed, item count, elapsed time, and burn mode. It deliberately excludes exam
+content, answers, API keys, and raw command strings.
+
 ## What this layer deliberately does not do
 
 - It does not publish exam items, ever — no CLI or API surface serves them.

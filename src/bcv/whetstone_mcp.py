@@ -133,9 +133,13 @@ def gate_impl(
     alpha: float | None = None,
     min_gains: int | None = None,
     max_regressions: int | None = None,
+    regression_policy: str = "strict",
+    max_noisy_regressions: int = 1,
+    reliability_min_observations: int = 3,
+    stable_flip_rate: float = 0.05,
     out_dir: str | None = None,
 ) -> dict:
-    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event_results, write_gate_report
+    from bcv.gate import GatePolicy, build_gate_report, latest_grade_event, write_gate_report
 
     bank = _bank()
     policy = GatePolicy(
@@ -143,10 +147,16 @@ def gate_impl(
         max_regressions=0 if max_regressions is None else max_regressions,
         confidence_alpha=0.05 if alpha is None else alpha,
         require_retained_probe=False,
+        regression_policy=regression_policy,
+        max_noisy_regressions=max_noisy_regressions,
+        reliability_min_observations=reliability_min_observations,
+        stable_flip_rate=stable_flip_rate,
     )
     events = bank.root / "grade_events.jsonl"
-    baseline_results = latest_grade_event_results(events, baseline)
-    candidate_results = latest_grade_event_results(events, candidate)
+    baseline_event = latest_grade_event(events, baseline)
+    candidate_event = latest_grade_event(events, candidate)
+    baseline_results = baseline_event["results"]
+    candidate_results = candidate_event["results"]
     shared = sorted(set(baseline_results) & set(candidate_results))
     if not shared:
         raise ValueError("baseline and candidate share no graded items")
@@ -158,6 +168,10 @@ def gate_impl(
         candidate_results={item: candidate_results[item] for item in shared},
         retained_probe=None,
         policy=policy,
+        grade_runs={
+            "baseline": baseline_event.get("run_manifest", {}),
+            "candidate": candidate_event.get("run_manifest", {}),
+        },
     )
     json_path, html_path = write_gate_report(report, out_dir or str(bank.root / f"gate_{candidate}"))
     evidence = report["paired_evidence"]
@@ -268,12 +282,22 @@ def whetstone_gate(
     alpha: float | None = None,
     min_gains: int | None = None,
     max_regressions: int | None = None,
+    regression_policy: str = "strict",
+    max_noisy_regressions: int = 1,
+    reliability_min_observations: int = 3,
+    stable_flip_rate: float = 0.05,
     out_dir: str | None = None,
 ) -> str:
     """Promotion decision from recorded grades: PASS, HOLD, or BLOCK, with paired
     evidence, exact McNemar p-value, the bank's resolution statement, and paths
     to the written JSON/HTML gate report."""
-    return json.dumps(gate_impl(baseline, candidate, alpha, min_gains, max_regressions, out_dir), sort_keys=True)
+    return json.dumps(
+        gate_impl(
+            baseline, candidate, alpha, min_gains, max_regressions,
+            regression_policy, max_noisy_regressions, reliability_min_observations, stable_flip_rate, out_dir,
+        ),
+        sort_keys=True,
+    )
 
 
 @mcp.tool()

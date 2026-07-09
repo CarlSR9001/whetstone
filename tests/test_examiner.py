@@ -72,10 +72,11 @@ def test_grade_events_preserve_item_level_paired_evidence(tmp_path):
     bank = ExaminerBank(tmp_path)
     item = _repair_item(status="promoted")
     bank.add(item)
-    bank.record_grades("base", {"t1": False})
+    bank.record_grades("base", {"t1": False}, run_manifest={"adapter": "fixture", "seed": 7})
     event = json.loads((tmp_path / "grade_events.jsonl").read_text(encoding="utf-8"))
     assert event["system"] == "base"
     assert event["results"] == {"t1": False}
+    assert event["run_manifest"] == {"adapter": "fixture", "seed": 7}
 
 
 def test_checker_spec_grading_no_answer_key():

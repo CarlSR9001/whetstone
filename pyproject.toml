@@ -11,6 +11,9 @@ dependencies = [
   "sentencepiece",
 ]
 
+[project.scripts]
+whetstone = "bcv.cli:main"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

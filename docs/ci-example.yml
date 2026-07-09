@@ -1,0 +1,47 @@
+# Example: Whetstone as a release gate in GitHub Actions.
+# The build fails unless the candidate version clears the private examiner.
+#
+# Assumes a self-hosted runner (or private environment) that holds the bank —
+# the bank never lives in the repository.
+
+name: agent-promotion-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: "Candidate system name (e.g. agent-v13)"
+        required: true
+      baseline:
+        description: "Current production system name"
+        required: true
+
+jobs:
+  gate:
+    runs-on: [self-hosted, whetstone]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Grade candidate on the private bank
+        run: |
+          python -m bcv.cli grade \
+            --system "${{ inputs.candidate }}" \
+            --command "python run_my_agent.py --version ${{ inputs.candidate }}"
+        env:
+          PYTHONPATH: src
+
+      - name: Promotion decision (exit code is the verdict: 0 PASS, 2 HOLD, 3 BLOCK)
+        run: |
+          python -m bcv.cli gate \
+            --baseline "${{ inputs.baseline }}" \
+            --candidate "${{ inputs.candidate }}" \
+            --out gate_report
+        env:
+          PYTHONPATH: src
+
+      - name: Attach the gate report to the run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-gate-report
+          path: gate_report/

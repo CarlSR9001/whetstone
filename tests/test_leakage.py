@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from bcv.leakage import behavioral_fingerprint, calibrate_behavioral_fingerprints
+from bcv.leakage import assess_dsl_leakage, behavioral_fingerprint, calibrate_behavioral_fingerprints
 
 
 def _observations():
@@ -35,3 +35,10 @@ def test_calibration_reports_measured_error_without_guessing_labels():
         "true_positives": 1, "false_positives": 0, "true_negatives": 1,
         "false_negatives": 0, "false_positive_rate": 0.0, "false_negative_rate": 0.0,
     }
+
+
+def test_paraphrased_training_expression_is_caught_after_row_identity_misses():
+    assessment = assess_dsl_leakage("not (not (is_bipartite))", {"is_bipartite"}, _observations())
+    assert assessment.risk == 0.5
+    assert assessment.match == "behavioral_fingerprint"
+    assert assessment.matched_training_expressions == ("is_bipartite",)

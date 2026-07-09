@@ -216,24 +216,14 @@ def mint_repair_items(
     """Repair exam items whose checker is the domain verifier + stress pool.
     Leakage: any item whose original the student trains on is quarantined."""
     from bcv.graph_repair_data import _candidate_expressions
-    from bcv.leakage import behavioral_fingerprint
+    from bcv.leakage import assess_dsl_leakage
     from bcv.novelty import NoveltyJudge
     from bcv.refinery import _mine_stress_repair, _observe_all, _stress_pool, _verify
 
     observations = _observe_all(domain, max_n, Path(".bcv_runs/examiner_tmp"))
     pool = _stress_pool(domain, stress_ns, 40, seed, Path(".bcv_runs/examiner_tmp/nolib.jsonl"))
     leak_set = training_originals(buffer_paths)
-    # Behavioral equivalence is deliberately evaluated on the certified horizon
-    # and stress pool. It catches re-ordered DSL forms without claiming a proof
-    # about graphs outside this versioned oracle corpus.
     fingerprint_observations = [*observations, *pool]
-    training_fingerprints: dict[str, set[str]] = {}
-    for trained_expression in leak_set:
-        try:
-            fingerprint = behavioral_fingerprint(trained_expression, fingerprint_observations)
-        except (SyntaxError, ValueError, TypeError, KeyError):
-            continue
-        training_fingerprints.setdefault(fingerprint, set()).add(trained_expression)
     judge = NoveltyJudge(max_n=max_n)
     items: list[ExamItem] = []
     for expression in _candidate_expressions():
@@ -249,14 +239,7 @@ def mint_repair_items(
         if repair is None:
             continue  # no certified repair exists: not a fair exam item
         novelty = judge.judge(repair, base_expression=expression)
-        row_identity = expression in leak_set
-        fingerprint_collision = False
-        if not row_identity:
-            try:
-                fingerprint_collision = behavioral_fingerprint(expression, fingerprint_observations) in training_fingerprints
-            except (SyntaxError, ValueError, TypeError, KeyError):
-                pass
-        leakage_match = "row_identity" if row_identity else "behavioral_fingerprint" if fingerprint_collision else ""
+        leakage = assess_dsl_leakage(expression, leak_set, fingerprint_observations)
         item = ExamItem(
             item_id=f"{domain.name}_{uuid.uuid4().hex[:8]}",
             domain=domain.name,
@@ -271,8 +254,8 @@ def mint_repair_items(
             horizon=f"n<={max_n} certified, stress n in {stress_ns}",
             lineage=[f"mined_repair:{repair}"],
             novelty=1.0 if novelty.semantically_novel else 0.0,
-            leakage_risk=1.0 if row_identity else 0.5 if fingerprint_collision else 0.0,
-            leakage_match=leakage_match,
+            leakage_risk=leakage.risk,
+            leakage_match=leakage.match,
         )
         if item.leakage_risk > 0:
             item.status = "quarantined"

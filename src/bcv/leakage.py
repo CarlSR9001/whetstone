@@ -15,6 +15,13 @@ from typing import Iterable
 from bcv.graph_agent import compile_feature_expression
 
 
+@dataclass(frozen=True)
+class LeakageAssessment:
+    risk: float
+    match: str
+    matched_training_expressions: tuple[str, ...]
+
+
 def behavioral_fingerprint(expression: str, observations: Iterable) -> str:
     """Hash the predicate's truth vector over a fixed oracle+stress corpus."""
     predicate = compile_feature_expression(expression)
@@ -22,6 +29,27 @@ def behavioral_fingerprint(expression: str, observations: Iterable) -> str:
     for observation in observations:
         bits.append(1 if predicate(observation) else 0)
     return hashlib.sha256(bytes(bits)).hexdigest()
+
+
+def assess_dsl_leakage(
+    expression: str, training_expressions: Iterable[str], observations: Iterable
+) -> LeakageAssessment:
+    """Layer row identity over reproducible finite-corpus behavioral matching."""
+    training = set(training_expressions)
+    if expression in training:
+        return LeakageAssessment(1.0, "row_identity", (expression,))
+    observations = tuple(observations)
+    candidate = behavioral_fingerprint(expression, observations)
+    matches = []
+    for trained in sorted(training):
+        try:
+            if behavioral_fingerprint(trained, observations) == candidate:
+                matches.append(trained)
+        except (SyntaxError, ValueError, TypeError, KeyError):
+            continue
+    if matches:
+        return LeakageAssessment(0.5, "behavioral_fingerprint", tuple(matches))
+    return LeakageAssessment(0.0, "", ())
 
 
 @dataclass(frozen=True)

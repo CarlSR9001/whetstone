@@ -43,6 +43,10 @@ def main() -> None:
     parser.add_argument("--grade-events", default=None, help="append-only grade_events.jsonl; preferred over aggregate counters")
     parser.add_argument("--output-dir", default=".bcv_runs/promotion_gate")
     parser.add_argument("--alpha", type=float, default=0.05)
+    parser.add_argument("--regression-policy", choices=("strict", "reliability_aware"), default="strict")
+    parser.add_argument("--max-noisy-regressions", type=int, default=1)
+    parser.add_argument("--reliability-min-observations", type=int, default=3)
+    parser.add_argument("--stable-flip-rate", type=float, default=0.05)
     args = parser.parse_args()
 
     bank = ExaminerBank(args.bank_root)
@@ -60,7 +64,13 @@ def main() -> None:
         baseline_results=baseline_results,
         candidate_results=candidate_results,
         retained_probe=retained,
-        policy=GatePolicy(confidence_alpha=args.alpha),
+        policy=GatePolicy(
+            confidence_alpha=args.alpha,
+            regression_policy=args.regression_policy,
+            max_noisy_regressions=args.max_noisy_regressions,
+            reliability_min_observations=args.reliability_min_observations,
+            stable_flip_rate=args.stable_flip_rate,
+        ),
     )
     json_path, html_path = write_gate_report(report, args.output_dir)
     print(json.dumps({"verdict": report["verdict"], "reasons": report["reasons"], "json": str(json_path), "html": str(html_path)}, indent=2))

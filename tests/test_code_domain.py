@@ -132,5 +132,53 @@ def test_extract_code_prefers_fenced_block():
 
 def test_expanded_code_bank_has_independent_hidden_checker_families():
     task_ids = {task.task_id for task in CODE_TASKS}
-    assert len(task_ids) >= 16
-    assert {"rotate_right", "sliding_max", "word_counts_ascii", "top_k_frequent"} <= task_ids
+    assert len(task_ids) >= 20
+    assert {
+        "rotate_right", "sliding_max", "word_counts_ascii", "top_k_frequent",
+        "find_all_anagrams", "shortest_path_length", "min_coin_change",
+    } <= task_ids
+
+
+def test_second_tranche_checkers_accept_reference_implementations():
+    references = {
+        "binary_search_left": """
+def binary_search_left(xs, target):
+    low, high = 0, len(xs)
+    while low < high:
+        middle = (low + high) // 2
+        if xs[middle] < target:
+            low = middle + 1
+        else:
+            high = middle
+    return low
+""",
+        "find_all_anagrams": """
+def find_all_anagrams(text, pattern):
+    if not pattern: return []
+    return [index for index in range(len(text) - len(pattern) + 1) if sorted(text[index:index + len(pattern)]) == sorted(pattern)]
+""",
+        "shortest_path_length": """
+def shortest_path_length(n, edges, start, goal):
+    adjacency = [[] for _ in range(n)]
+    for a, b in edges:
+        adjacency[a].append(b); adjacency[b].append(a)
+    queue, seen = [(start, 0)], {start}
+    for node, distance in queue:
+        if node == goal: return distance
+        for nxt in adjacency[node]:
+            if nxt not in seen:
+                seen.add(nxt); queue.append((nxt, distance + 1))
+    return -1
+""",
+        "min_coin_change": """
+def min_coin_change(coins, target):
+    best = [0] + [target + 1] * target
+    for amount in range(1, target + 1):
+        for coin in coins:
+            if 0 < coin <= amount:
+                best[amount] = min(best[amount], best[amount - coin] + 1)
+    return -1 if best[target] > target else best[target]
+""",
+    }
+    for task_id, source in references.items():
+        assert grade_code_answer(_item(task_id), source) is True

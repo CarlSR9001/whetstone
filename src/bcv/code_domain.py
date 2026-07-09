@@ -395,6 +395,43 @@ def check(ns):
     ),
 )
 
+# A second tranche deliberately targets algorithms that require more than a
+# familiar one-liner.  Their test generators and oracles remain private.
+CODE_TASKS += (
+    CodeTask(
+        task_id="binary_search_left",
+        prompt=(
+            "Define binary_search_left(xs: list[int], target: int) -> int for a sorted nondecreasing list. "
+            "Return the first position where target can be inserted while preserving order (from 0 through len(xs))."
+        ),
+        checker_source="import bisect, random\ndef check(ns):\n    search = ns['binary_search_left']\n    rng = random.Random(61)\n    cases = [([], 0), ([1], 0), ([1], 1), ([1, 1, 1], 1), ([1, 3, 5], 4)]\n    cases += [(sorted(rng.randrange(-10, 11) for _ in range(rng.randrange(0, 45))), rng.randrange(-12, 13)) for _ in range(70)]\n    for xs, target in cases:\n        assert search(list(xs), target) == bisect.bisect_left(xs, target), f'wrong insertion position for {xs}, {target}'\n",
+    ),
+    CodeTask(
+        task_id="find_all_anagrams",
+        prompt=(
+            "Define find_all_anagrams(text: str, pattern: str) -> list[int] returning every starting index "
+            "of a substring of text that is an anagram of pattern. Overlapping matches count; an empty pattern returns []."
+        ),
+        checker_source="import random\ndef check(ns):\n    find = ns['find_all_anagrams']\n    def oracle(text, pattern):\n        if not pattern: return []\n        target = sorted(pattern)\n        return [i for i in range(len(text) - len(pattern) + 1) if sorted(text[i:i + len(pattern)]) == target]\n    rng = random.Random(67)\n    cases = [('cbaebabacd', 'abc'), ('abab', 'ab'), ('aaaa', 'aa'), ('', 'a'), ('abc', '')]\n    cases += [(''.join(rng.choice('abcd') for _ in range(rng.randrange(0, 35))), ''.join(rng.choice('abcd') for _ in range(rng.randrange(0, 8)))) for _ in range(60)]\n    for text, pattern in cases:\n        assert find(text, pattern) == oracle(text, pattern), f'wrong anagram positions for {text!r}, {pattern!r}'\n",
+    ),
+    CodeTask(
+        task_id="shortest_path_length",
+        prompt=(
+            "Define shortest_path_length(n: int, edges: list[tuple[int, int]], start: int, goal: int) -> int for "
+            "an undirected graph with nodes 0..n-1. Return the fewest edges from start to goal, or -1 if unreachable."
+        ),
+        checker_source="import collections, random\ndef check(ns):\n    shortest = ns['shortest_path_length']\n    def oracle(n, edges, start, goal):\n        adjacency = [[] for _ in range(n)]\n        for a, b in edges: adjacency[a].append(b); adjacency[b].append(a)\n        queue = collections.deque([(start, 0)]); seen = {start}\n        while queue:\n            node, distance = queue.popleft()\n            if node == goal: return distance\n            for nxt in adjacency[node]:\n                if nxt not in seen: seen.add(nxt); queue.append((nxt, distance + 1))\n        return -1\n    rng = random.Random(73)\n    cases = [(1, [], 0, 0), (3, [(0, 1)], 0, 2), (4, [(0, 1), (1, 2), (2, 3)], 0, 3)]\n    for _ in range(55):\n        n = rng.randrange(1, 10)\n        edges = [(a, b) for a in range(n) for b in range(a + 1, n) if rng.random() < .25]\n        cases.append((n, edges, rng.randrange(n), rng.randrange(n)))\n    for n, edges, start, goal in cases:\n        assert shortest(n, list(edges), start, goal) == oracle(n, edges, start, goal), f'wrong path length for {n}, {edges}, {start}, {goal}'\n",
+    ),
+    CodeTask(
+        task_id="min_coin_change",
+        prompt=(
+            "Define min_coin_change(coins: list[int], target: int) -> int returning the fewest coins needed to sum "
+            "to a nonnegative target using each positive denomination any number of times, or -1 when impossible. Target 0 returns 0."
+        ),
+        checker_source="import random\ndef check(ns):\n    change = ns['min_coin_change']\n    def oracle(coins, target):\n        best = [0] + [target + 1] * target\n        for amount in range(1, target + 1):\n            best[amount] = min((best[amount - coin] + 1 for coin in coins if 0 < coin <= amount), default=target + 1)\n        return -1 if best[target] > target else best[target]\n    rng = random.Random(79)\n    cases = [([], 0), ([], 5), ([1, 2, 5], 11), ([2], 3), ([2, 4], 8)]\n    cases += [([rng.randrange(1, 10) for _ in range(rng.randrange(1, 6))], rng.randrange(0, 60)) for _ in range(60)]\n    for coins, target in cases:\n        assert change(list(coins), target) == oracle(coins, target), f'wrong coin change for {coins}, {target}'\n",
+    ),
+)
+
 TASKS_BY_ID = {task.task_id: task for task in CODE_TASKS}
 
 

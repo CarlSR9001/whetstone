@@ -118,10 +118,21 @@ def test_leakage_quarantine_on_prompt_overlap(tmp_path):
     leaked = CODE_TASKS[0]
     buffer = tmp_path / "train.jsonl"
     buffer.write_text("training row containing the exact task text: " + leaked.prompt + "\n", encoding="utf-8")
-    items = mint_code_items([buffer], max_items=3)
+    items = mint_code_items([buffer], max_items=len(CODE_TASKS))
     statuses = {item.payload["task_id"]: item.status for item in items}
     assert statuses[leaked.task_id] == "quarantined"
     assert any(status == "candidate" for task, status in statuses.items() if task != leaked.task_id)
+
+
+def test_code_bank_seed_reproducibly_selects_a_non_prefix_slice():
+    first = mint_code_items(max_items=8, seed=17)
+    repeated = mint_code_items(max_items=8, seed=17)
+    other = mint_code_items(max_items=8, seed=18)
+    first_ids = [item.payload["task_id"] for item in first]
+    assert first_ids == [item.payload["task_id"] for item in repeated]
+    assert first_ids != [item.payload["task_id"] for item in other]
+    assert first_ids != [task.task_id for task in CODE_TASKS[:8]]
+    assert {item.payload["selection_seed"] for item in first} == {17}
 
 
 def test_extract_code_prefers_fenced_block():
@@ -132,10 +143,11 @@ def test_extract_code_prefers_fenced_block():
 
 def test_expanded_code_bank_has_independent_hidden_checker_families():
     task_ids = {task.task_id for task in CODE_TASKS}
-    assert len(task_ids) >= 20
+    assert len(task_ids) >= 24
     assert {
         "rotate_right", "sliding_max", "word_counts_ascii", "top_k_frequent",
         "find_all_anagrams", "shortest_path_length", "min_coin_change",
+        "spiral_order", "normalize_posix_path", "count_islands", "is_valid_sudoku",
     } <= task_ids
 
 
@@ -178,6 +190,57 @@ def min_coin_change(coins, target):
             if 0 < coin <= amount:
                 best[amount] = min(best[amount], best[amount - coin] + 1)
     return -1 if best[target] > target else best[target]
+""",
+    }
+    for task_id, source in references.items():
+        assert grade_code_answer(_item(task_id), source) is True
+
+
+def test_third_tranche_checkers_accept_reference_implementations():
+    references = {
+        "spiral_order": """
+def spiral_order(matrix):
+    if not matrix or not matrix[0]: return []
+    top, bottom, left, right, out = 0, len(matrix)-1, 0, len(matrix[0])-1, []
+    while top <= bottom and left <= right:
+        out.extend(matrix[top][left:right+1]); top += 1
+        for row in range(top, bottom+1): out.append(matrix[row][right])
+        right -= 1
+        if top <= bottom: out.extend(reversed(matrix[bottom][left:right+1])); bottom -= 1
+        if left <= right:
+            for row in range(bottom, top-1, -1): out.append(matrix[row][left])
+            left += 1
+    return out
+""",
+        "normalize_posix_path": """
+def normalize_posix_path(path):
+    absolute, parts = path.startswith('/'), []
+    for segment in path.split('/'):
+        if not segment or segment == '.': continue
+        if segment == '..':
+            if parts and parts[-1] != '..': parts.pop()
+            elif not absolute: parts.append(segment)
+        else: parts.append(segment)
+    result = '/'.join(parts)
+    return '/' + result if absolute else result or '.'
+""",
+        "count_islands": """
+def count_islands(grid):
+    remaining = {(r, c) for r, row in enumerate(grid) for c, value in enumerate(row) if value == '1'}
+    groups = 0
+    while remaining:
+        groups += 1; stack = [remaining.pop()]
+        while stack:
+            r, c = stack.pop()
+            for nxt in ((r-1,c),(r+1,c),(r,c-1),(r,c+1)):
+                if nxt in remaining: remaining.remove(nxt); stack.append(nxt)
+    return groups
+""",
+        "is_valid_sudoku": """
+def is_valid_sudoku(board):
+    groups = list(board) + [''.join(row[c] for row in board) for c in range(9)]
+    groups += [''.join(board[r][c] for r in range(br,br+3) for c in range(bc,bc+3)) for br in range(0,9,3) for bc in range(0,9,3)]
+    return all(len([x for x in group if x != '.']) == len(set(x for x in group if x != '.')) for group in groups)
 """,
     }
     for task_id, source in references.items():

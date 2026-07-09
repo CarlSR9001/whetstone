@@ -16,6 +16,7 @@ production deployments should run graders inside their existing containment.
 from __future__ import annotations
 
 import json
+import random
 import re
 import subprocess
 import sys
@@ -432,6 +433,41 @@ CODE_TASKS += (
     ),
 )
 
+CODE_TASKS += (
+    CodeTask(
+        task_id="spiral_order",
+        prompt=(
+            "Define spiral_order(matrix: list[list[int]]) -> list[int] for a rectangular matrix. Return the "
+            "elements clockwise from the top-left; [] and matrices with zero columns return []. Do not mutate matrix."
+        ),
+        checker_source="import random\ndef check(ns):\n    spiral = ns['spiral_order']\n    def oracle(matrix):\n        if not matrix or not matrix[0]: return []\n        top, bottom, left, right, out = 0, len(matrix)-1, 0, len(matrix[0])-1, []\n        while top <= bottom and left <= right:\n            out.extend(matrix[top][left:right+1]); top += 1\n            for row in range(top, bottom+1): out.append(matrix[row][right])\n            right -= 1\n            if top <= bottom: out.extend(reversed(matrix[bottom][left:right+1])); bottom -= 1\n            if left <= right:\n                for row in range(bottom, top-1, -1): out.append(matrix[row][left])\n                left += 1\n        return out\n    rng = random.Random(101)\n    cases = [[], [[]], [[], []], [[1]], [[1,2,3]], [[1],[2],[3]], [[1,2],[4,5],[7,8]]]\n    cases += [[[rng.randrange(-9,10) for _ in range(cols)] for _ in range(rows)] for rows, cols in [(rng.randrange(0,7), rng.randrange(0,7)) for _ in range(45)]]\n    for matrix in cases:\n        original = [list(row) for row in matrix]\n        assert spiral(matrix) == oracle(matrix), f'wrong spiral for {matrix}'\n        assert matrix == original, 'mutated input'\n",
+    ),
+    CodeTask(
+        task_id="normalize_posix_path",
+        prompt=(
+            "Define normalize_posix_path(path: str) -> str. Split on '/', remove empty and '.' segments, resolve '..' "
+            "without moving above root for absolute paths, preserve leading '/' when absolute, and return '.' for an empty relative result."
+        ),
+        checker_source="import random\ndef check(ns):\n    normalize = ns['normalize_posix_path']\n    def oracle(path):\n        absolute = path.startswith('/'); parts = []\n        for segment in path.split('/'):\n            if not segment or segment == '.': continue\n            if segment == '..':\n                if parts and parts[-1] != '..': parts.pop()\n                elif not absolute: parts.append(segment)\n            else: parts.append(segment)\n        result = '/'.join(parts)\n        return '/' + result if absolute else result or '.'\n    rng = random.Random(103); atoms = ['', '.', '..', 'a', 'b', 'tmp']\n    cases = ['', '.', 'a/./b', 'a/../../b', '/a/../../b', '/', '//a///b/', '/a/../b']\n    cases += [('' if rng.random() < .5 else '/') + '/'.join(rng.choice(atoms) for _ in range(rng.randrange(0,9))) for _ in range(70)]\n    for path in cases: assert normalize(path) == oracle(path), f'wrong normalized path for {path!r}'\n",
+    ),
+    CodeTask(
+        task_id="count_islands",
+        prompt=(
+            "Define count_islands(grid: list[str]) -> int. Each equal-length row contains only '0' and '1'; count "
+            "4-directionally connected groups of '1'. An empty grid has zero islands. Do not mutate grid."
+        ),
+        checker_source="import random\ndef check(ns):\n    count = ns['count_islands']\n    def oracle(grid):\n        if not grid: return 0\n        cells = {(r,c) for r,row in enumerate(grid) for c,value in enumerate(row) if value == '1'}; groups = 0\n        while cells:\n            groups += 1; stack = [cells.pop()]\n            while stack:\n                r,c = stack.pop()\n                for nxt in ((r-1,c),(r+1,c),(r,c-1),(r,c+1)):\n                    if nxt in cells: cells.remove(nxt); stack.append(nxt)\n        return groups\n    rng = random.Random(107)\n    cases = [[], ['0'], ['1'], ['11000','11000','00100','00011']]\n    cases += [[''.join(rng.choice('01') for _ in range(cols)) for _ in range(rows)] for rows, cols in [(rng.randrange(0,8), rng.randrange(1,9)) for _ in range(60)]]\n    for grid in cases:\n        original = list(grid)\n        assert count(grid) == oracle(grid), f'wrong island count for {grid}'\n        assert grid == original, 'mutated input'\n",
+    ),
+    CodeTask(
+        task_id="is_valid_sudoku",
+        prompt=(
+            "Define is_valid_sudoku(board: list[str]) -> bool for a 9x9 partial Sudoku board using digits '1'..'9' "
+            "and '.'. Return True exactly when no row, column, or 3x3 box repeats a digit."
+        ),
+        checker_source="import random\ndef check(ns):\n    valid = ns['is_valid_sudoku']\n    def oracle(board):\n        groups = list(board) + [''.join(row[c] for row in board) for c in range(9)]\n        groups += [''.join(board[r][c] for r in range(br,br+3) for c in range(bc,bc+3)) for br in range(0,9,3) for bc in range(0,9,3)]\n        return all(len([x for x in group if x != '.']) == len(set(x for x in group if x != '.')) for group in groups)\n    rng = random.Random(109)\n    good = ['53..7....','6..195...','.98....6.','8...6...3','4..8.3..1','7...2...6','.6....28.','...419..5','....8..79']\n    bad_row = ['553..7...','6..195...','.98....6.','8...6...3','4..8.3..1','7...2...6','.6....28.','...419..5','....8..79']\n    cases = [good, bad_row]\n    for _ in range(60):\n        board = [['.' for _ in range(9)] for _ in range(9)]\n        for _ in range(rng.randrange(0,30)): board[rng.randrange(9)][rng.randrange(9)] = str(rng.randrange(1,10))\n        cases.append([''.join(row) for row in board])\n    for board in cases: assert valid(list(board)) == oracle(board), f'wrong sudoku verdict for {board}'\n",
+    ),
+)
+
 TASKS_BY_ID = {task.task_id: task for task in CODE_TASKS}
 
 
@@ -452,17 +488,25 @@ def mint_code_items(
     max_items: int = 8,
     seed: int = 0,
 ) -> list[ExamItem]:
+    """Mint a reproducible, seed-selected slice of the private task library.
+
+    A fixed prefix silently makes successive "fresh" banks identical. The
+    seed is therefore selection provenance, not cosmetic randomness: a later
+    audit can recreate the task slice without exposing checkers to candidates.
+    """
     buffer_paths = buffer_paths or []
+    tasks = list(CODE_TASKS)
+    random.Random(seed).shuffle(tasks)
     items: list[ExamItem] = []
-    for task in CODE_TASKS[:max_items]:
+    for task in tasks[:max_items]:
         leaked = training_overlap(buffer_paths, task.prompt)
         item = ExamItem(
             item_id=f"code_{uuid.uuid4().hex[:8]}",
             domain="code",
             kind="code_task",
-            payload={"task_id": task.task_id, "prompt": task.prompt},
+            payload={"task_id": task.task_id, "prompt": task.prompt, "selection_seed": seed},
             oracle="hidden_property_checks",
-            source="task_library_v1",
+            source="task_library_v2",
             horizon="property_checks_v1",
             lineage=[task.task_id],
             leakage_risk=1.0 if leaked else 0.0,

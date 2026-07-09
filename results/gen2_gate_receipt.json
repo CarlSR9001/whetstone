@@ -1,0 +1,25 @@
+{
+  "evidence_scope": "local gen-2 adapter evaluation, 2026-07-09",
+  "full_promotion_gate": {
+    "bank_sha256": "3fe44c58c232e4ad94cb52151153463bbb00fcd9a4a20054488c73cd4f0e3114",
+    "exact_mcnemar_two_sided_p": 0.375,
+    "gains": 4,
+    "items": 33,
+    "reason": "1 regression exceeds the zero-regression policy",
+    "regressions": 1,
+    "ties": 28,
+    "verdict": "BLOCK"
+  },
+  "retained_coloring_probe": {
+    "adapter_verified": 4,
+    "base_verified": 0,
+    "delta": 4,
+    "items": 8,
+    "no_regression": true
+  },
+  "systems": {
+    "baseline": "base_4b_v2",
+    "candidate": "gen2"
+  },
+  "note": "Sanitized receipt derived from private local artifacts. It intentionally omits prompts, item IDs, model paths, and raw outputs. The retained probe clears the no-regression caveat; it does not override the full gate BLOCK."
+}

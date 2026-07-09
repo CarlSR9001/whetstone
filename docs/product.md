@@ -40,6 +40,13 @@ replays were item-for-item identical, so reliability-aware gating also BLOCKED:
 the regressions were stable rather than noisy. A single local PASS is evidence,
 not a license to stop measuring.
 
+The original gen-2 adapter's retained-coloring caveat is also closed in
+`results/gen2_gate_receipt.json`: the adapter verified 4/8 retained items
+against the base model's 0/8, so the probe did not regress. That does **not**
+turn the round into a promotion: the paired 33-item gate remained **BLOCK**
+with one playground regression and p=.375. The receipt is sanitized; private
+prompts, outputs, item IDs, and adapter paths stay in ignored local artifacts.
+
 Code-bank minting now selects a reproducible shuffled library slice from
 `--seed`, rather than always taking a fixed prefix. A new seed-4, 12-item
 cohort included four previously untested families (islands, Sudoku validity,

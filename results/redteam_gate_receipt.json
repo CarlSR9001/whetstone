@@ -1,0 +1,15 @@
+{
+  "evidence_scope": "local hostile self-test, 2026-07-09",
+  "inflation_attack": {
+    "caught": true,
+    "leaked_items": 6,
+    "protected_bank_verdict": "HOLD",
+    "unsafe_counterfactual_verdict": "PASS"
+  },
+  "paraphrase_attack": {
+    "behavioral_fingerprint_matched": true,
+    "promotion_allowed": false,
+    "row_identity_evaded": true
+  },
+  "note": "Sanitized receipt from the private red-team artifact. It omits attack expressions, item payloads, prompts, and bank contents. The test demonstrates defenses against the specified attacks; it is not a proof against every leakage mechanism."
+}

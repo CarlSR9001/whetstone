@@ -47,6 +47,12 @@ turn the round into a promotion: the paired 33-item gate remained **BLOCK**
 with one playground regression and p=.375. The receipt is sanitized; private
 prompts, outputs, item IDs, and adapter paths stay in ignored local artifacts.
 
+`results/redteam_gate_receipt.json` records the hostile self-test: a semantic
+paraphrase evaded row identity but the behavioral fingerprint quarantined it;
+and a toy memorizer's six leaked-item wins would have produced an unsafe PASS,
+while the protected bank issued HOLD. It is evidence for these attacks, not a
+claim that the leakage defense is complete.
+
 Code-bank minting now selects a reproducible shuffled library slice from
 `--seed`, rather than always taking a fixed prefix. A new seed-4, 12-item
 cohort included four previously untested families (islands, Sudoku validity,

@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from bcv.examiner import ExamItem, ExaminerBank
+from bcv.gate import (
+    GatePolicy, build_gate_report, exact_mcnemar_p_value, latest_grade_event_results, write_gate_report,
+)
+
+
+def _bank(tmp_path, count: int = 6) -> ExaminerBank:
+    bank = ExaminerBank(tmp_path)
+    for index in range(count):
+        bank.add(ExamItem(
+            item_id=f"i{index}", domain="coloring" if index % 2 else "mis", kind="repair",
+            payload={}, oracle="test", source="test", horizon="test", lineage=[], status="promoted",
+        ))
+    return bank
+
+
+def _retained(base: int = 0, candidate: int = 6, items: int = 8) -> dict:
+    return {"eval": {"base_verified": base, "adapter_verified": candidate, "eval_examples": items}}
+
+
+def test_exact_mcnemar_is_two_sided():
+    assert exact_mcnemar_p_value(4, 0) == 0.125
+    assert exact_mcnemar_p_value(6, 0) == 0.03125
+    assert exact_mcnemar_p_value(0, 0) == 1.0
+
+
+def test_gate_passes_only_with_paired_confidence_and_retained_probe(tmp_path):
+    bank = _bank(tmp_path)
+    baseline = {item_id: False for item_id in bank.items}
+    candidate = {item_id: True for item_id in bank.items}
+    report = build_gate_report(bank, "base", "candidate", baseline, candidate, _retained())
+    assert report["verdict"] == "PASS"
+    assert report["paired_evidence"]["exact_mcnemar_two_sided_p"] == 0.03125
+    json_path, html_path = write_gate_report(report, tmp_path / "report")
+    assert json_path.exists() and html_path.exists()
+    assert "Private bank SHA-256" in html_path.read_text(encoding="utf-8")
+
+
+def test_gate_holds_weak_gain_and_blocks_regression(tmp_path):
+    bank = _bank(tmp_path, count=3)
+    baseline = {item_id: False for item_id in bank.items}
+    candidate = {item_id: True for item_id in bank.items}
+    weak = build_gate_report(bank, "base", "candidate", baseline, candidate, _retained())
+    assert weak["verdict"] == "HOLD"
+    candidate["i0"] = False
+    baseline["i0"] = True
+    blocked = build_gate_report(bank, "base", "candidate", baseline, candidate, _retained())
+    assert blocked["verdict"] == "BLOCK"
+
+
+def test_burned_items_never_return_to_promotion_or_training(tmp_path):
+    bank = _bank(tmp_path, count=1)
+    bank.burn("i0", provider="example-api", reason="external grading")
+    bank.save()
+    reloaded = ExaminerBank(tmp_path)
+    assert reloaded.items["i0"].status == "burned"
+    assert not reloaded.promoted_items()
+    assert not reloaded.trainable_rows()
+    assert not reloaded.promote("i0")
+
+
+def test_latest_grade_event_is_used_instead_of_aggregate_history(tmp_path):
+    events = tmp_path / "grade_events.jsonl"
+    events.write_text(
+        '{"event":"grade","system":"base","results":{"old":false}}\n'
+        '{"event":"grade","system":"base","results":{"new":true}}\n',
+        encoding="utf-8",
+    )
+    assert latest_grade_event_results(events, "base") == {"new": True}

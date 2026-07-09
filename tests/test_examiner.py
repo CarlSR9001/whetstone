@@ -68,6 +68,16 @@ def test_training_originals_extraction(tmp_path):
     assert training_originals([buffer]) == {"is_tree"}
 
 
+def test_grade_events_preserve_item_level_paired_evidence(tmp_path):
+    bank = ExaminerBank(tmp_path)
+    item = _repair_item(status="promoted")
+    bank.add(item)
+    bank.record_grades("base", {"t1": False})
+    event = json.loads((tmp_path / "grade_events.jsonl").read_text(encoding="utf-8"))
+    assert event["system"] == "base"
+    assert event["results"] == {"t1": False}
+
+
 def test_checker_spec_grading_no_answer_key():
     item = _repair_item(original="is_tree")
     # Any verified strict refinement passes; a wrong one fails; garbage fails.

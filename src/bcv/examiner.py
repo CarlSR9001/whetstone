@@ -28,6 +28,7 @@ import json
 import random
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from bcv.domains import COLORING, MIS, Domain
@@ -51,6 +52,8 @@ class ExamItem:
     leakage_risk: float = 0.0
     staleness: int = 0
     graded: dict = field(default_factory=dict)  # system -> {"pass": int, "fail": int}
+    exposures: list[dict] = field(default_factory=list)
+    leakage_match: str = ""
 
     def discrimination(self) -> float:
         rates = []
@@ -66,7 +69,7 @@ class ExaminerBank:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.items: dict[str, ExamItem] = {}
-        for bucket in ("candidate", "promoted", "retired", "quarantined"):
+        for bucket in ("candidate", "promoted", "retired", "quarantined", "burned"):
             path = self._bucket_path(bucket)
             if path.exists():
                 for line in path.read_text(encoding="utf-8").splitlines():
@@ -80,11 +83,14 @@ class ExaminerBank:
             "promoted": "private_promotion_exam.jsonl",
             "retired": "public_regression.jsonl",
             "quarantined": "quarantined.jsonl",
+            "burned": "burned.jsonl",
         }
         return self.root / names[bucket]
 
     def save(self) -> None:
-        buckets: dict[str, list[ExamItem]] = {"candidate": [], "promoted": [], "retired": [], "quarantined": []}
+        buckets: dict[str, list[ExamItem]] = {
+            "candidate": [], "promoted": [], "retired": [], "quarantined": [], "burned": []
+        }
         for item in self.items.values():
             buckets[item.status].append(item)
         for bucket, rows in buckets.items():
@@ -111,6 +117,24 @@ class ExaminerBank:
         if item.status == "promoted":
             item.status = "retired"
 
+    def burn(self, item_id: str, provider: str, reason: str) -> None:
+        """Permanently remove an externally exposed item from every reusable pool.
+
+        Remote API grading consumes a private item: it may be retained in the
+        audit trail, but it can never again be a promotion item or training fuel.
+        """
+        item = self.items[item_id]
+        if item.status not in {"candidate", "promoted"}:
+            raise ValueError(f"only candidate or promoted items can burn; {item_id} is {item.status}")
+        item.status = "burned"
+        item.exposures.append(
+            {
+                "provider": provider,
+                "reason": reason,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
     def promoted_items(self, domain: str | None = None) -> list[ExamItem]:
         return [
             item
@@ -127,6 +151,17 @@ class ExaminerBank:
             item = self.items[item_id]
             stats = item.graded.setdefault(system, {"pass": 0, "fail": 0})
             stats["pass" if passed else "fail"] += 1
+        # Results, unlike aggregates, preserve the paired evidence needed for a
+        # later promotion decision. The bank files remain the durable state;
+        # this append-only trail is the decision audit surface.
+        event = {
+            "event": "grade",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "system": system,
+            "results": results,
+        }
+        with (self.root / "grade_events.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
 
     def sweep_saturation(self, min_systems: int = 2) -> list[str]:
         """Items every graded system passes stop discriminating: stale, then retired."""
@@ -181,12 +216,24 @@ def mint_repair_items(
     """Repair exam items whose checker is the domain verifier + stress pool.
     Leakage: any item whose original the student trains on is quarantined."""
     from bcv.graph_repair_data import _candidate_expressions
+    from bcv.leakage import behavioral_fingerprint
     from bcv.novelty import NoveltyJudge
     from bcv.refinery import _mine_stress_repair, _observe_all, _stress_pool, _verify
 
     observations = _observe_all(domain, max_n, Path(".bcv_runs/examiner_tmp"))
     pool = _stress_pool(domain, stress_ns, 40, seed, Path(".bcv_runs/examiner_tmp/nolib.jsonl"))
     leak_set = training_originals(buffer_paths)
+    # Behavioral equivalence is deliberately evaluated on the certified horizon
+    # and stress pool. It catches re-ordered DSL forms without claiming a proof
+    # about graphs outside this versioned oracle corpus.
+    fingerprint_observations = [*observations, *pool]
+    training_fingerprints: dict[str, set[str]] = {}
+    for trained_expression in leak_set:
+        try:
+            fingerprint = behavioral_fingerprint(trained_expression, fingerprint_observations)
+        except (SyntaxError, ValueError, TypeError, KeyError):
+            continue
+        training_fingerprints.setdefault(fingerprint, set()).add(trained_expression)
     judge = NoveltyJudge(max_n=max_n)
     items: list[ExamItem] = []
     for expression in _candidate_expressions():
@@ -202,6 +249,14 @@ def mint_repair_items(
         if repair is None:
             continue  # no certified repair exists: not a fair exam item
         novelty = judge.judge(repair, base_expression=expression)
+        row_identity = expression in leak_set
+        fingerprint_collision = False
+        if not row_identity:
+            try:
+                fingerprint_collision = behavioral_fingerprint(expression, fingerprint_observations) in training_fingerprints
+            except (SyntaxError, ValueError, TypeError, KeyError):
+                pass
+        leakage_match = "row_identity" if row_identity else "behavioral_fingerprint" if fingerprint_collision else ""
         item = ExamItem(
             item_id=f"{domain.name}_{uuid.uuid4().hex[:8]}",
             domain=domain.name,
@@ -216,7 +271,8 @@ def mint_repair_items(
             horizon=f"n<={max_n} certified, stress n in {stress_ns}",
             lineage=[f"mined_repair:{repair}"],
             novelty=1.0 if novelty.semantically_novel else 0.0,
-            leakage_risk=1.0 if expression in leak_set else 0.0,
+            leakage_risk=1.0 if row_identity else 0.5 if fingerprint_collision else 0.0,
+            leakage_match=leakage_match,
         )
         if item.leakage_risk > 0:
             item.status = "quarantined"

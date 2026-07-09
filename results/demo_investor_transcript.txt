@@ -1,0 +1,36 @@
+WHETSTONE - the promotion gate for AI agents, live in one minute
+====================================================================
+Toy bank, real machinery: minting, leakage quarantine, grading,
+discrimination, retirement below are the production code paths.
+The two systems under exam are stored answer policies (exhibits);
+every grade is computed live. The production bank stays private.
+
+[1] Student training buffer: 6 distinct originals on disk
+[2] Minting exam items (exact verifier at n<=6, stress pool at n in (7, 8))...
+    16 candidate items minted (12 repair, 4 game-move)
+[3] Leakage check (row identity vs training buffer): 4 collisions QUARANTINED, 12 items promoted to the active bank
+    quarantined coloring_69430d18: student trained on `is_tree`
+    quarantined coloring_5e6bc010: student trained on `is_forest`
+    quarantined coloring_ef5bb9f7: student trained on `is_bipartite`
+    quarantined coloring_1b12f3e6: student trained on `is_triangle_free`
+    bank on disk: .bcv_runs\demo_investor\bank\private_promotion_exam.jsonl
+
+    Example exam prompt (what a system under exam sees):
+    | Repair a rejected conjecture. Claim: degree-descending greedy coloring uses exactly the chromatic number. The predicate ...
+    There is no answer string to leak: the checker accepts ANY verified
+    strict refinement that survives the stress pool.
+
+[4] Grading two systems against the private bank (live checker, no answer keys):
+    student_v1 (memorizer, echoes its training data): 4/12
+    student_v2 (gate candidate, proposes repairs):    10/12
+[5] Discrimination (learned from grading history): 6/12 items now separate the two systems
+[6] Promotion gate: 6 gains, 0 regressions -> decision: PASS
+[7] Saturation sweep: 4 item(s) stopped discriminating -> retired
+    downward-only flow: 4 retired item(s) now available as
+    student training fuel; nothing exposed to training re-enters the bank
+
+====================================================================
+Ledger: .bcv_runs\demo_investor\ledger.jsonl (24 events, append-only)
+Done in 10.9s. The asymmetry is the product: the exam evolves,
+leaks are quarantined before they can flatter a candidate, and every
+promotion decision is a reproducible artifact, not a vibe.

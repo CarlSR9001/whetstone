@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whetstone — the private promotion gate for AI agents</title>
+<style>
+  :root {
+    --paper: #F2F4F3;
+    --ink: #1B2228;
+    --ink-soft: #4A555C;
+    --line: #C9D1CE;
+    --accent: #33607F;
+    --accent-ink: #FFFFFF;
+    --pass: #2E7D4F;
+    --block: #AF4339;
+    --quarantine: #A8761F;
+    --card: #FBFCFB;
+    --mono-bg: #E8ECEA;
+    --display: "Bahnschrift", "Archivo Narrow", "Arial Narrow", "Segoe UI", sans-serif;
+    --body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #171C1F; --ink: #E4E9E7; --ink-soft: #9AA6A3; --line: #313B3F;
+      --accent: #6FA3C4; --accent-ink: #10161A; --pass: #5CB984; --block: #DB7C6E;
+      --quarantine: #D2A452; --card: #1E2529; --mono-bg: #10161A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171C1F; --ink: #E4E9E7; --ink-soft: #9AA6A3; --line: #313B3F;
+    --accent: #6FA3C4; --accent-ink: #10161A; --pass: #5CB984; --block: #DB7C6E;
+    --quarantine: #D2A452; --card: #1E2529; --mono-bg: #10161A;
+  }
+  :root[data-theme="light"] {
+    --paper: #F2F4F3; --ink: #1B2228; --ink-soft: #4A555C; --line: #C9D1CE;
+    --accent: #33607F; --accent-ink: #FFFFFF; --pass: #2E7D4F; --block: #AF4339;
+    --quarantine: #A8761F; --card: #FBFCFB; --mono-bg: #E8ECEA;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    padding: 40px 24px;
+  }
+  .sheet { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+           border-bottom: 3px solid var(--ink); padding-bottom: 14px; }
+  .wordmark { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: 0.04em; }
+  .wordmark span { color: var(--accent); }
+  .kicker { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); letter-spacing: 0.06em; }
+
+  .thesis { font-family: var(--display); font-size: 23px; line-height: 1.35; font-weight: 400;
+            max-width: 40em; text-wrap: balance; }
+  .thesis strong { font-weight: 700; color: var(--accent); }
+
+  .diagram { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1.15fr 28px 1fr; gap: 10px 0;
+             align-items: stretch; }
+  .node { background: var(--card); border: 1.5px solid var(--ink); padding: 12px 14px; }
+  .node h3 { font-family: var(--display); font-size: 15px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .node p { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
+  .node.examiner { border-width: 2.5px; border-color: var(--accent); }
+  .node.examiner h3 { color: var(--accent); }
+  .arrow { display: flex; align-items: center; justify-content: center;
+           font-family: var(--mono); font-size: 16px; color: var(--ink-soft); }
+  .drop { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
+  .verdicts { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+  .verdict { font-family: var(--mono); font-size: 13px; font-weight: 700; padding: 6px 10px;
+             border-left: 4px solid; background: var(--card); }
+  .verdict.pass { border-color: var(--pass); color: var(--pass); }
+  .verdict.block { border-color: var(--block); color: var(--block); }
+  .branch { font-size: 12.5px; padding: 8px 12px; border-left: 4px solid var(--quarantine);
+            background: var(--card); color: var(--ink-soft); }
+  .branch b { color: var(--quarantine); font-family: var(--mono); font-size: 12px; }
+  .under-examiner { grid-column: 5 / 6; }
+  .under-gate { grid-column: 7 / 8; }
+  .loop { grid-column: 1 / -1; font-size: 12.5px; color: var(--ink-soft); border: 1.5px dashed var(--line);
+          padding: 8px 12px; display: flex; gap: 10px; align-items: baseline; }
+  .loop b { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+
+  .mechanisms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .mech { border-top: 3px solid var(--accent); padding-top: 10px; }
+  .mech h4 { font-family: var(--display); font-size: 15px; letter-spacing: 0.02em; }
+  .mech p { font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+
+  .receipts { background: var(--card); border: 1.5px solid var(--line); padding: 14px 18px; }
+  .receipts h4 { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+                 text-transform: uppercase; color: var(--ink-soft); margin-bottom: 10px; }
+  .receipts ul { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 24px; padding: 0; }
+  .receipts li { font-size: 13px; padding-left: 14px; position: relative; }
+  .receipts li::before { content: "▸"; position: absolute; left: 0; color: var(--accent); }
+  .receipts b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+           border-top: 3px solid var(--ink); padding-top: 12px; }
+  .cmd { font-family: var(--mono); font-size: 13px; background: var(--mono-bg); padding: 8px 12px;
+         overflow-x: auto; white-space: nowrap; }
+  .cmd b { color: var(--accent); font-weight: 700; }
+  footer .repo { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); }
+
+  @media (max-width: 760px) {
+    .diagram { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); padding: 2px 0; }
+    .drop { grid-template-columns: 1fr; }
+    .under-examiner, .under-gate { grid-column: auto; }
+    .mechanisms, .receipts ul { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <div class="wordmark">WHETSTONE<span>.</span></div>
+    <div class="kicker">private promotion infrastructure for AI agents</div>
+  </header>
+
+  <p class="thesis">Whetstone tells you whether a new agent version <strong>actually improved</strong> —
+  without letting the agent train on its own test. The exam evolves, stays private,
+  and every promotion decision is an auditable artifact.</p>
+
+  <div class="diagram">
+    <div class="node"><h3>Training buffer</h3><p>Whatever the team fine-tunes or prompts on. Whetstone reads it; it never reads Whetstone.</p></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><h3>Candidate version</h3><p>A new adapter, agent build, or prompt stack proposed for release.</p></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node examiner"><h3>Private examiner</h3><p>An evolving exam bank graded by checker specs — there is no answer key to leak. Items the candidate trained on are quarantined before they can flatter it.</p></div>
+    <div class="arrow">&#8594;</div>
+    <div class="node"><h3>Promotion gate</h3><p>Gains vs. regressions on items that discriminate, written to an append-only ledger.</p></div>
+
+    <div class="drop">
+      <div class="branch under-examiner"><b>QUARANTINE</b> &mdash; row-identity overlap with any training artifact removes an item from play before it can flatter a candidate.</div>
+      <div class="verdicts under-gate">
+        <div class="verdict pass">PROMOTE &#10003;</div>
+        <div class="verdict block">BLOCK &#10007;</div>
+      </div>
+    </div>
+
+    <div class="loop"><b>RETIRE &rarr; DOWNWARD-ONLY FLOW</b> items every system passes stop discriminating and retire; retired exams become training fuel for the next candidate. Nothing exposed to training ever re-enters the private bank.</div>
+  </div>
+
+  <div class="mechanisms">
+    <div class="mech"><h4>No answer keys</h4>
+      <p>Repair items carry a checker spec: any verified strict refinement that survives the stress pool passes. You cannot memorize what was never written down.</p></div>
+    <div class="mech"><h4>Leakage is checked, not assumed</h4>
+      <p>Every candidate exam item is tested for row identity against the actual training buffers before promotion into the bank.</p></div>
+    <div class="mech"><h4>The exam is a managed asset</h4>
+      <p>Discrimination is learned from grading history; saturated items retire; the bank refreshes at the frontier the last grading exposed.</p></div>
+  </div>
+
+  <div class="receipts">
+    <h4>Receipts &mdash; public repo, reproducible</h4>
+    <ul>
+      <li><b>99/121</b> conjectures perfect at n&le;6 are false at n=7/8 — why exposed, static evals lie</li>
+      <li><b>0/8 &rarr; 8/8</b> cold start in one verifier-gated training round</li>
+      <li><b>1/33 &rarr; 4/33</b> across six domains after the examiner exposed the frontier — a saturated internal probe said 8/8 while the leakage-clean bank said 0/11</li>
+      <li><b>~10 s</b> live demo of the full gate on CPU, no GPU, deterministic</li>
+    </ul>
+  </div>
+
+  <footer>
+    <div class="cmd">$ <b>python -m bcv.demo_investor</b> &nbsp;&mdash;&nbsp; mint &middot; quarantine &middot; grade &middot; decide &middot; ledger</div>
+    <div class="repo">github.com/CarlSR9001/whetstone &middot; AGPL-3.0 + commercial</div>
+  </footer>
+</div>
+</body>
+</html>

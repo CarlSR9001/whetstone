@@ -32,6 +32,25 @@ Selected results (full ledger with methods, nulls, and receipts in
 
 Licensed AGPL-3.0. Commercial licensing available from the author.
 
+## The sixty-second demo
+
+The whole promotion gate, live, on CPU, in about ten seconds:
+
+```powershell
+$env:PYTHONPATH='src'; python -m bcv.demo_investor
+```
+
+It mints exam items at the verifier frontier, quarantines the ones a toy
+student trained on (row-identity leakage check against a real buffer on disk),
+grades two systems through the checker specs — a memorizer that echoes its
+training data and a candidate that proposes repairs — computes per-item
+discrimination, issues a gains-vs-regressions promotion decision, retires
+saturated items into the downward-only training flow, and writes an append-only
+ledger. The two systems are stored answer policies (this keeps the demo off the
+GPU); every mint, quarantine, and grade is the production code path, computed
+live. A canonical transcript is in
+[results/demo_investor_transcript.txt](results/demo_investor_transcript.txt).
+
 ## Research context
 
 For readers (human or otherwise) mapping this to the literature: whetstone is an

@@ -7,6 +7,8 @@
     whetstone status                    bank health: buckets, discrimination, metabolism
     whetstone burn --item ID ...        record an external exposure by hand
     whetstone calibrate-panel           measure panel agreement on labeled cases
+    whetstone panel-export              write an unlabeled human-review queue
+    whetstone panel-adjudicate          require two-reviewer consensus for labels
     whetstone serve --port 8977         the examiner as a local JSON service
 
 Exit codes are the CI contract: PASS=0, HOLD=2, BLOCK=3, usage/config errors=1.
@@ -253,6 +255,25 @@ def cmd_calibrate_panel(args, config: dict) -> int:
     return 0
 
 
+def cmd_panel_export(args, config: dict) -> int:
+    from bcv.panel_review import export_blind_review_queue
+
+    report = export_blind_review_queue(args.source, args.out)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_panel_adjudicate(args, config: dict) -> int:
+    from bcv.panel_review import adjudicate_review_labels
+
+    disagreements = args.disagreements or str(Path(args.out).with_suffix(".disagreements.jsonl"))
+    report = adjudicate_review_labels(
+        args.queue, args.labels, args.out, disagreements, min_reviewers=args.min_reviewers
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_serve(args, config: dict) -> int:
     from bcv.service import serve
 
@@ -375,6 +396,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_cal.add_argument("--labeled", default="sample_docs/support_calibration.jsonl")
     p_cal.add_argument("--out")
     p_cal.set_defaults(fn=cmd_calibrate_panel)
+
+    p_export = sub.add_parser("panel-export", help="write an unlabeled review queue for independent human calibration")
+    p_export.add_argument("--source", required=True, help="JSONL rows with case and answer; any existing labels are stripped")
+    p_export.add_argument("--out", required=True, help="unlabeled review queue JSONL")
+    p_export.set_defaults(fn=cmd_panel_export)
+
+    p_adjudicate = sub.add_parser("panel-adjudicate", help="produce calibration rows only from unanimous reviewer votes")
+    p_adjudicate.add_argument("--queue", required=True, help="queue produced by panel-export")
+    p_adjudicate.add_argument("--labels", required=True, nargs="+", help="one JSONL vote file per reviewer")
+    p_adjudicate.add_argument("--out", required=True, help="consensus calibration JSONL")
+    p_adjudicate.add_argument("--disagreements", help="unresolved-vote JSONL (default next to --out)")
+    p_adjudicate.add_argument("--min-reviewers", type=int, default=2)
+    p_adjudicate.set_defaults(fn=cmd_panel_adjudicate)
 
     p_serve = sub.add_parser("serve", help="run the examiner as a local JSON service")
     p_serve.add_argument("--port", type=int, default=8977)

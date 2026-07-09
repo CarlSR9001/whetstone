@@ -78,6 +78,21 @@ correctness. It is the regression target while adding case-specific
 policy/claim checks and later replacing authored labels with independent
 spot-checks.
 
+`results/support_hard_semantic_qwen3_baseline.json` records the first
+local-model research pass: a qwen3:8b semantic veto panel reaches 12/13
+agreement on the same adversarial cases (0 false rejects), but has **one false
+accept**. It is therefore deliberately *not* admitted to mint promotion-bank
+items. A condition-extraction prompt variant was also tested and lost (11/13,
+still one false accept), so it was discarded rather than presented as progress.
+
+For real support calibration, `whetstone panel-export` makes a blind JSONL
+queue with the existing labels and provenance stripped. `whetstone
+panel-adjudicate` accepts one vote file per named reviewer and emits
+calibration triples only when at least two distinct reviewers unanimously
+agree; missing and split votes go to a separate disagreement file. This is an
+auditable intake mechanism, not a claim that two reviewer IDs prove human
+independence.
+
 **The service** (`bcv/service.py`, `whetstone serve`) — GET /status,
 POST /grade, POST /gate over localhost JSON. It accepts answers, never model
 endpoints, so it cannot be tricked into shipping private prompts to an

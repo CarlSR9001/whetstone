@@ -1,0 +1,22 @@
+{
+  "api_base": "http://127.0.0.1:11434/v1",
+  "calibration": {
+    "abstention_rate": 0.1731,
+    "agreement": 0.9231,
+    "cases": 13,
+    "false_accepts": 1,
+    "false_rejects": 0,
+    "panel": "support_agent_semantic:qwen3:8b",
+    "per_check_fail_counts": {
+      "no_invented_numbers": 0,
+      "policy_compliant": 0,
+      "semantic_source_verdict": 5,
+      "substantive_reply": 0
+    }
+  },
+  "label_sources": [
+    "expert_authored_adversarial"
+  ],
+  "model": "qwen3:8b",
+  "note": "Research-only local semantic-panel baseline. One false accept blocks promotion-checker admission; labels are expert-authored adversarial cases, not independent human calibration."
+}

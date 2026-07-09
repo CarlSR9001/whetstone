@@ -91,6 +91,14 @@ def test_full_cli_pipeline(tmp_path, monkeypatch, capsys):
     assert (report_dir / "promotion_gate.html").exists()
 
 
+def test_init_can_create_an_explicit_config_path(tmp_path):
+    config = tmp_path / "ci" / "whetstone.toml"
+    bank_root = tmp_path / "ci" / "bank"
+    assert cli.main(["--config", str(config), "--root", str(bank_root), "init"]) == 0
+    assert config.exists()
+    assert (bank_root / "items.jsonl").exists()
+
+
 def test_status_and_burn(tmp_path, capsys):
     bank_root = tmp_path / "bank"
     assert cli.main(["--root", str(bank_root), "mint", "--domain", "code", "--max-items", "2"]) == 0

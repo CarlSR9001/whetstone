@@ -308,7 +308,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = load_config(args.config)
+    # `init --config path` is the bootstrap path for a fresh project/CI
+    # workspace. Loading an explicitly named file before init would make it
+    # impossible for init to create that file.
+    config = {} if args.command == "init" else load_config(args.config)
     return args.fn(args, config)
 
 

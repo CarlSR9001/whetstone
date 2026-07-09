@@ -40,6 +40,14 @@ replays were item-for-item identical, so reliability-aware gating also BLOCKED:
 the regressions were stable rather than noisy. A single local PASS is evidence,
 not a license to stop measuring.
 
+Code-bank minting now selects a reproducible shuffled library slice from
+`--seed`, rather than always taking a fixed prefix. A new seed-4, 12-item
+cohort included four previously untested families (islands, Sudoku validity,
+POSIX normalization, and spiral traversal). It also **BLOCKED**: qwen3-8B
+scored 5/12 against qwen2.5-1.5B's 4/12, with 4 gains, 3 regressions, and
+p=1.0. The local evidence file records task-level outcomes rather than hiding
+that result behind aggregate scores.
+
 ## The pieces
 
 **Candidates** (`bcv/candidates.py`) — anything that answers can be graded:

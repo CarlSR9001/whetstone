@@ -38,6 +38,31 @@
       "qwen3:8b_seconds": [507.7, 475.6, 505.4]
     }
   },
+  "twelve_item_seed_4_cohort": {
+    "bank": "fresh leakage-clean seed-selected twelve-item code bank from task_library_v2; includes four new checker families",
+    "selection_seed": 4,
+    "gate": {
+      "gains": 4,
+      "p_value": 1.0,
+      "regressions": 3,
+      "verdict": "BLOCK"
+    },
+    "models": {
+      "qwen2.5:1.5b": "4/12",
+      "qwen3:8b": "5/12"
+    },
+    "new_family_outcomes": {
+      "count_islands": {"qwen2.5:1.5b": "pass", "qwen3:8b": "fail"},
+      "is_valid_sudoku": {"qwen2.5:1.5b": "fail", "qwen3:8b": "fail"},
+      "normalize_posix_path": {"qwen2.5:1.5b": "fail", "qwen3:8b": "fail"},
+      "spiral_order": {"qwen2.5:1.5b": "fail", "qwen3:8b": "fail"}
+    },
+    "qwen3_regressions": ["base_digits", "count_islands", "min_coin_change"],
+    "timing": {
+      "qwen2.5:1.5b_seconds": 10.3,
+      "qwen3:8b_seconds": 316.3
+    }
+  },
   "eight_item_run": {
     "bank": "fresh leakage-clean eight-item code bank",
     "gate": {
@@ -64,5 +89,5 @@
       "qwen3:8b": "2/4"
     }
   },
-  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. The sixteen-item result is a real paired PASS for that local comparison, but the independent twenty-item replication BLOCKED because qwen3 had three stable regressions. Neither result is a frontier-model claim or a general capability benchmark."
+  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. The sixteen-item result is a real paired PASS for that local comparison, but both a 20-item replication and a seed-selected 12-item v2 cohort BLOCKED because qwen3 regressed. Neither result is a frontier-model claim or a general capability benchmark."
 }

@@ -496,7 +496,11 @@ def mint_code_items(
     """
     buffer_paths = buffer_paths or []
     tasks = list(CODE_TASKS)
-    random.Random(seed).shuffle(tasks)
+    # Seed zero is the documented canonical starter cohort, retained for
+    # compatible CLI/MCP/ACP examples. Every explicit nonzero seed selects a
+    # distinct deterministic slice instead of silently reusing that prefix.
+    if seed:
+        random.Random(seed).shuffle(tasks)
     items: list[ExamItem] = []
     for task in tasks[:max_items]:
         leaked = training_overlap(buffer_paths, task.prompt)

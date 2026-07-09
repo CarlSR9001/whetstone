@@ -245,6 +245,39 @@ def cmd_serve(args, config: dict) -> int:
     return 0
 
 
+def cmd_sweep(args, config: dict) -> int:
+    """Saturation sweep: retire items every graded system passes (after two
+    consecutive saturated rounds) and report the downward flow."""
+    bank = open_bank(args, config)
+    retired = bank.sweep_saturation(min_systems=args.min_systems)
+    bank.save()
+    print(json.dumps({
+        "retired_this_sweep": retired,
+        "trainable_rows_available": len(bank.trainable_rows()),
+        "promoted_remaining": len(bank.promoted_items()),
+        "note": "items retire on the second consecutive saturated sweep; run after each grading round",
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_demo(args, config: dict) -> int:
+    from bcv.demo_investor import DemoConfig, run_demo
+
+    run_demo(DemoConfig(seed=args.seed))
+    return 0
+
+
+def cmd_redteam(args, config: dict) -> int:
+    """Hostile self-test of the quarantine and gate; nonzero exit on any escape."""
+    from bcv.redteam import run_redteam
+
+    report = run_redteam(root=args.out)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    paraphrase_escaped = report["paraphrase_attack"]["promotion_allowed"]
+    inflation_escaped = not report["inflation_attack"]["caught"]
+    return 1 if (paraphrase_escaped or inflation_escaped) else 0
+
+
 def cmd_mcp(args, config: dict) -> int:
     import bcv.whetstone_mcp as whetstone_mcp
 
@@ -324,6 +357,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser("mcp", help="run the examiner as an MCP server (stdio)")
     p_mcp.set_defaults(fn=cmd_mcp)
+
+    p_sweep = sub.add_parser("sweep", help="retire saturated items into the downward flow")
+    p_sweep.add_argument("--min-systems", type=int, default=2)
+    p_sweep.set_defaults(fn=cmd_sweep)
+
+    p_demo = sub.add_parser("demo", help="the sixty-second investor walkthrough (toy bank, real machinery)")
+    p_demo.add_argument("--seed", type=int, default=0)
+    p_demo.set_defaults(fn=cmd_demo)
+
+    p_redteam = sub.add_parser("redteam", help="hostile self-test of quarantine + gate; nonzero exit on escape")
+    p_redteam.add_argument("--out", default=".bcv_runs/redteam")
+    p_redteam.set_defaults(fn=cmd_redteam)
 
     return parser
 

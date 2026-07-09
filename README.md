@@ -32,6 +32,31 @@ Selected results (full ledger with methods, nulls, and receipts in
 
 Licensed AGPL-3.0. Commercial licensing available from the author.
 
+## The product layer
+
+The research harness above is operable as a product: one CLI, adapters for any
+system under exam, pluggable verifiers, a CI contract, and agent-native
+surfaces. Full guide in [docs/product.md](docs/product.md).
+
+```powershell
+$env:PYTHONPATH='src'
+python -m bcv.cli init                                   # bank + whetstone.toml
+python -m bcv.cli mint --domain code --max-items 8       # hidden-check exam items
+python -m bcv.cli grade --system v2 --command "python my_agent.py"
+python -m bcv.cli grade --system v2 --acp "my-acp-agent" # any Agent Client Protocol agent
+python -m bcv.cli gate --baseline v1 --candidate v2      # exit code IS the verdict: 0 PASS, 2 HOLD, 3 BLOCK
+python -m bcv.cli sweep                                  # retire saturated items downward
+python -m bcv.cli redteam                                # hostile self-test; nonzero exit on escape
+python -m bcv.cli serve --port 8977                      # localhost JSON service
+python -m bcv.cli mcp                                    # MCP server (also in .mcp.json)
+```
+
+Grading an external endpoint burns every exposed item — permanently — via the
+bank's exposure accounting; the promotion report carries paired evidence, an
+exact McNemar p-value, the bank's own resolution statement, and a SHA-256
+commitment to bank state. No surface, human or agent, ever serves exam item
+contents.
+
 ## The sixty-second demo
 
 The whole promotion gate, live, on CPU, in about ten seconds:

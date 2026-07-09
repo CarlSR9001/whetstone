@@ -44,6 +44,10 @@ min_gains = 1
 max_regressions = 0
 confidence_alpha = 0.05
 require_retained_probe = false
+regression_policy = "strict" # strict | reliability_aware
+max_noisy_regressions = 1
+reliability_min_observations = 3
+stable_flip_rate = 0.05
 
 [grading]
 stress_ns = [7, 8]
@@ -153,6 +157,22 @@ def cmd_gate(args, config: dict) -> int:
         max_regressions=args.max_regressions if args.max_regressions is not None else int(policy_config.get("max_regressions", 0)),
         confidence_alpha=args.alpha if args.alpha is not None else float(policy_config.get("confidence_alpha", 0.05)),
         require_retained_probe=bool(policy_config.get("require_retained_probe", False)) if args.retained_probe is None else True,
+        regression_policy=args.regression_policy or str(policy_config.get("regression_policy", "strict")),
+        max_noisy_regressions=(
+            args.max_noisy_regressions
+            if args.max_noisy_regressions is not None
+            else int(policy_config.get("max_noisy_regressions", 1))
+        ),
+        reliability_min_observations=(
+            args.reliability_min_observations
+            if args.reliability_min_observations is not None
+            else int(policy_config.get("reliability_min_observations", 3))
+        ),
+        stable_flip_rate=(
+            args.stable_flip_rate
+            if args.stable_flip_rate is not None
+            else float(policy_config.get("stable_flip_rate", 0.05))
+        ),
     )
     events_path = bank.root / "grade_events.jsonl"
     baseline_results = latest_grade_event_results(events_path, args.baseline)
@@ -377,6 +397,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate.add_argument("--alpha", type=float)
     p_gate.add_argument("--min-gains", type=int)
     p_gate.add_argument("--max-regressions", type=int)
+    p_gate.add_argument("--regression-policy", choices=("strict", "reliability_aware"))
+    p_gate.add_argument("--max-noisy-regressions", type=int)
+    p_gate.add_argument("--reliability-min-observations", type=int)
+    p_gate.add_argument("--stable-flip-rate", type=float)
     p_gate.set_defaults(fn=cmd_gate)
 
     p_status = sub.add_parser("status", help="bank health and metabolism")

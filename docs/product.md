@@ -33,6 +33,13 @@ qwen3-8B scored 13/16. The paired gate issued **PASS**: seven gains, zero
 regressions, exact p=.015625. This is a reproducible local-model comparison,
 not a frontier-model claim.
 
+The next fresh 20-item bank is the counterweight that makes the evidence
+credible: qwen2.5-1.5B scored 7/20 while qwen3-8B scored 10/20, but the paired
+gate issued **BLOCK** (6 gains, 3 regressions, p=.5078125). Three full qwen3
+replays were item-for-item identical, so reliability-aware gating also BLOCKED:
+the regressions were stable rather than noisy. A single local PASS is evidence,
+not a license to stop measuring.
+
 ## The pieces
 
 **Candidates** (`bcv/candidates.py`) — anything that answers can be graded:
@@ -106,6 +113,12 @@ promotion. See [ci-example.yml](ci-example.yml). The gate report (JSON + a
 self-contained HTML page with the paired evidence, the exact McNemar p-value,
 and a SHA-256 commitment to the bank state) is the artifact you attach to the
 release — the receipt for why this version shipped.
+
+After repeated grading, use `whetstone gate --regression-policy
+reliability_aware` to distinguish a flip on a historically stable item (fatal)
+from one on a measured noisy item (an explicit budget) or an item with too
+little history (HOLD). The report records both the selected policy and its
+per-item reliability evidence.
 
 ## What this layer deliberately does not do
 

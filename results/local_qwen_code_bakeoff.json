@@ -15,6 +15,29 @@
       "qwen3:8b": "13/16"
     }
   },
+  "twenty_item_replication": {
+    "bank": "fresh leakage-clean twenty-item code bank; qwen3 repeated three times on identical private items",
+    "gate": {
+      "gains": 6,
+      "p_value": 0.5078125,
+      "regressions": 3,
+      "strict_verdict": "BLOCK",
+      "reliability_aware_verdict": "BLOCK"
+    },
+    "models": {
+      "qwen2.5:1.5b": "7/20 (one run)",
+      "qwen3:8b": "10/20, 10/20, 10/20 (three full regenerations; zero item flips)"
+    },
+    "stable_regressions": [
+      "base_digits",
+      "longest_common_prefix",
+      "min_coin_change"
+    ],
+    "timing": {
+      "qwen2.5:1.5b_seconds": 12.8,
+      "qwen3:8b_seconds": [507.7, 475.6, 505.4]
+    }
+  },
   "eight_item_run": {
     "bank": "fresh leakage-clean eight-item code bank",
     "gate": {
@@ -41,5 +64,5 @@
       "qwen3:8b": "2/4"
     }
   },
-  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. The sixteen-item result is a real paired PASS for this local comparison, not a frontier-model claim or a general capability benchmark."
+  "note": "Local-model baseline runs on 2026-07-09. The initial 512-token budget produced empty qwen3 final answers because its reasoning consumed the budget; 2048 tokens produced valid code. The sixteen-item result is a real paired PASS for that local comparison, but the independent twenty-item replication BLOCKED because qwen3 had three stable regressions. Neither result is a frontier-model claim or a general capability benchmark."
 }

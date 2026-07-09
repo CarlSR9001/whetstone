@@ -115,6 +115,18 @@ def test_openai_compatible_candidate_forwards_completion_budget(monkeypatch):
     assert captured["max_tokens"] == 2048
 
 
+def test_gate_cli_exposes_reliability_aware_policy_controls():
+    args = cli.build_parser().parse_args([
+        "gate", "--baseline", "old", "--candidate", "new",
+        "--regression-policy", "reliability_aware", "--max-noisy-regressions", "2",
+        "--reliability-min-observations", "4", "--stable-flip-rate", "0.1",
+    ])
+    assert args.regression_policy == "reliability_aware"
+    assert args.max_noisy_regressions == 2
+    assert args.reliability_min_observations == 4
+    assert args.stable_flip_rate == 0.1
+
+
 def test_status_and_burn(tmp_path, capsys):
     bank_root = tmp_path / "bank"
     assert cli.main(["--root", str(bank_root), "mint", "--domain", "code", "--max-items", "2"]) == 0

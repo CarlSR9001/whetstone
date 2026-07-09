@@ -48,6 +48,17 @@ scored 5/12 against qwen2.5-1.5B's 4/12, with 4 gains, 3 regressions, and
 p=1.0. The local evidence file records task-level outcomes rather than hiding
 that result behind aggregate scores.
 
+Run the same local-only protocol without reconstructing it by hand:
+
+```powershell
+whetstone local-bakeoff --out .bcv_runs/my_bakeoff --seed 4 --items 12 `
+  --baseline-model qwen2.5:1.5b --candidate-model qwen3:8b --candidate-repeats 3
+```
+
+The command refuses non-local endpoints and a non-empty output directory. It
+writes the private bank, run manifests, `local_bakeoff.json`, and the signed
+JSON/HTML promotion-gate receipt under `--out`.
+
 ## The pieces
 
 **Candidates** (`bcv/candidates.py`) — anything that answers can be graded:

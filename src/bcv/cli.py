@@ -9,6 +9,7 @@
     whetstone calibrate-panel           measure panel agreement on labeled cases
     whetstone panel-export              write an unlabeled human-review queue
     whetstone panel-adjudicate          require two-reviewer consensus for labels
+    whetstone local-bakeoff             run a fresh localhost-only paired code experiment
     whetstone serve --port 8977         the examiner as a local JSON service
 
 Exit codes are the CI contract: PASS=0, HOLD=2, BLOCK=3, usage/config errors=1.
@@ -300,6 +301,33 @@ def cmd_panel_adjudicate(args, config: dict) -> int:
     return 0
 
 
+def cmd_local_bakeoff(args, config: dict) -> int:
+    from bcv.candidates import OpenAICompatibleCandidate
+    from bcv.gate import GatePolicy
+    from bcv.local_bakeoff import run_local_code_bakeoff
+
+    baseline = OpenAICompatibleCandidate(
+        args.api_base, args.baseline_model, max_tokens=args.max_tokens, timeout_seconds=args.timeout
+    )
+    candidate = OpenAICompatibleCandidate(
+        args.api_base, args.candidate_model, max_tokens=args.max_tokens, timeout_seconds=args.timeout
+    )
+    policy = GatePolicy(
+        confidence_alpha=args.alpha,
+        regression_policy=args.regression_policy,
+        max_noisy_regressions=args.max_noisy_regressions,
+        reliability_min_observations=args.reliability_min_observations,
+        stable_flip_rate=args.stable_flip_rate,
+        require_retained_probe=False,
+    )
+    summary = run_local_code_bakeoff(
+        args.out, args.baseline_system, baseline, args.candidate_system, candidate,
+        items=args.items, seed=args.seed, candidate_repeats=args.candidate_repeats, policy=policy,
+    )
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return EXIT_BY_VERDICT[summary["gate"]["verdict"]]
+
+
 def cmd_serve(args, config: dict) -> int:
     from bcv.service import serve
 
@@ -439,6 +467,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_adjudicate.add_argument("--disagreements", help="unresolved-vote JSONL (default next to --out)")
     p_adjudicate.add_argument("--min-reviewers", type=int, default=2)
     p_adjudicate.set_defaults(fn=cmd_panel_adjudicate)
+
+    p_bakeoff = sub.add_parser("local-bakeoff", help="fresh local-only paired code-bank experiment")
+    p_bakeoff.add_argument("--out", required=True, help="new, empty bank directory for this experiment")
+    p_bakeoff.add_argument("--api-base", default="http://127.0.0.1:11434/v1")
+    p_bakeoff.add_argument("--baseline-model", required=True)
+    p_bakeoff.add_argument("--candidate-model", required=True)
+    p_bakeoff.add_argument("--baseline-system", default="baseline")
+    p_bakeoff.add_argument("--candidate-system", default="candidate")
+    p_bakeoff.add_argument("--items", type=int, default=12)
+    p_bakeoff.add_argument("--seed", type=int, default=1)
+    p_bakeoff.add_argument("--candidate-repeats", type=int, default=1)
+    p_bakeoff.add_argument("--max-tokens", type=int, default=2048)
+    p_bakeoff.add_argument("--timeout", type=float, default=180.0)
+    p_bakeoff.add_argument("--alpha", type=float, default=0.05)
+    p_bakeoff.add_argument("--regression-policy", choices=("strict", "reliability_aware"), default="strict")
+    p_bakeoff.add_argument("--max-noisy-regressions", type=int, default=1)
+    p_bakeoff.add_argument("--reliability-min-observations", type=int, default=3)
+    p_bakeoff.add_argument("--stable-flip-rate", type=float, default=0.05)
+    p_bakeoff.set_defaults(fn=cmd_local_bakeoff)
 
     p_serve = sub.add_parser("serve", help="run the examiner as a local JSON service")
     p_serve.add_argument("--port", type=int, default=8977)

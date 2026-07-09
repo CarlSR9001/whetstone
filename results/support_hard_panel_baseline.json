@@ -1,0 +1,16 @@
+{
+  "abstention_rate": 0.1731,
+  "agreement": 0.0,
+  "cases": 13,
+  "false_accepts": 6,
+  "false_rejects": 7,
+  "label_source": "expert_authored_adversarial",
+  "note": "Baseline for support_agent_v1 on the hard corpus. This is a failure-finding artifact, not a calibrated production claim: the lexical grounding check accepts source-worded false claims and rejects valid paraphrases.",
+  "panel": "support_agent_v1",
+  "per_check_fail_counts": {
+    "grounded_in_source": 7,
+    "no_invented_numbers": 0,
+    "policy_compliant": 0,
+    "substantive_reply": 0
+  }
+}

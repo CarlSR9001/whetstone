@@ -28,6 +28,8 @@ from bcv.examiner import ExaminerBank
 
 
 def status_payload(bank: ExaminerBank) -> dict:
+    from bcv.metabolism import metabolism_summary
+
     statuses: dict[str, int] = {}
     domains: dict[str, int] = {}
     for item in bank.items.values():
@@ -39,6 +41,7 @@ def status_payload(bank: ExaminerBank) -> dict:
         "promoted_by_domain": dict(sorted(domains.items())),
         "discriminating_items": sum(1 for item in bank.promoted_items() if item.discrimination() > 0),
         "graded_systems": sorted({system for item in bank.items.values() for system in item.graded}),
+        "metabolism_history": metabolism_summary(bank.root),
     }
 
 

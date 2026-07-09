@@ -101,14 +101,29 @@ class ExaminerBank:
 
     # ------------------------------------------------------------- lifecycle
 
+    def _log_lifecycle(self, event: str, item_id: str, **payload) -> None:
+        """Append-only lifecycle trail (bank_events.jsonl). Grade events keep
+        their own file because the gate consumes it; this trail is what makes
+        the bank's METABOLISM measurable: mint rate vs consumption rate."""
+        row = {
+            "event": event,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "item_id": item_id,
+            **payload,
+        }
+        with (self.root / "bank_events.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+
     def add(self, item: ExamItem) -> None:
         self.items[item.item_id] = item
+        self._log_lifecycle("minted", item.item_id, domain=item.domain, status=item.status)
 
     def promote(self, item_id: str) -> bool:
         item = self.items[item_id]
         if item.status != "candidate" or item.leakage_risk > 0:
             return False
         item.status = "promoted"
+        self._log_lifecycle("promoted", item_id, domain=item.domain)
         return True
 
     def retire(self, item_id: str) -> None:
@@ -116,6 +131,7 @@ class ExaminerBank:
         item = self.items[item_id]
         if item.status == "promoted":
             item.status = "retired"
+            self._log_lifecycle("retired", item_id, domain=item.domain)
 
     def burn(self, item_id: str, provider: str, reason: str) -> None:
         """Permanently remove an externally exposed item from every reusable pool.
@@ -126,6 +142,7 @@ class ExaminerBank:
         item = self.items[item_id]
         if item.status not in {"candidate", "promoted"}:
             raise ValueError(f"only candidate or promoted items can burn; {item_id} is {item.status}")
+        prior_status = item.status
         item.status = "burned"
         item.exposures.append(
             {
@@ -133,6 +150,9 @@ class ExaminerBank:
                 "reason": reason,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
+        )
+        self._log_lifecycle(
+            "burned", item_id, domain=item.domain, provider=provider, prior_status=prior_status
         )
 
     def promoted_items(self, domain: str | None = None) -> list[ExamItem]:

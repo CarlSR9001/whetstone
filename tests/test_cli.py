@@ -99,6 +99,22 @@ def test_init_can_create_an_explicit_config_path(tmp_path):
     assert (bank_root / "items.jsonl").exists()
 
 
+def test_openai_compatible_candidate_forwards_completion_budget(monkeypatch):
+    captured = {}
+
+    class FakeCandidate:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("bcv.candidates.OpenAICompatibleCandidate", FakeCandidate)
+    args = cli.build_parser().parse_args([
+        "grade", "--system", "local", "--api-base", "http://127.0.0.1:11434/v1",
+        "--model", "qwen3:8b", "--max-tokens", "2048",
+    ])
+    cli.build_candidate(args)
+    assert captured["max_tokens"] == 2048
+
+
 def test_status_and_burn(tmp_path, capsys):
     bank_root = tmp_path / "bank"
     assert cli.main(["--root", str(bank_root), "mint", "--domain", "code", "--max-items", "2"]) == 0

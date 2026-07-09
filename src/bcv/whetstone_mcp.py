@@ -55,6 +55,21 @@ def status_impl() -> dict:
     return {"root": _BANK_ROOT, **status_payload(_bank())}
 
 
+def metabolism_impl(output_dir: str | None = None) -> dict:
+    from bcv.metabolism import metabolism_report, write_metabolism_report
+
+    bank = _bank()
+    report = metabolism_report(bank.root)
+    json_path, html_path = write_metabolism_report(bank.root, output_dir or str(bank.root / "metabolism"))
+    return {
+        "sustainability": report["sustainability"],
+        "events_total": report["events_total"],
+        "current_promoted_supply": report["current_promoted_supply"],
+        "report_json": str(json_path),
+        "report_html": str(html_path),
+    }
+
+
 def mint_impl(domain: str, max_items: int = 8, seed: int = 0, buffers: list[str] | None = None) -> dict:
     from bcv.registry import MINTABLE_DOMAINS, mint_domain
 
@@ -86,6 +101,7 @@ def grade_endpoint_impl(
     api_key_env: str | None = None,
     max_items: int | None = None,
     timeout_seconds: float = 120.0,
+    max_tokens: int = 512,
     allow_external_no_burn: bool = False,
 ) -> dict:
     from bcv.candidates import OpenAICompatibleCandidate
@@ -95,6 +111,7 @@ def grade_endpoint_impl(
         base_url=api_base,
         model=model,
         api_key=os.environ.get(api_key_env) if api_key_env else None,
+        max_tokens=max_tokens,
         timeout_seconds=timeout_seconds,
     )
     report = grade_bank(
@@ -194,6 +211,13 @@ def whetstone_status() -> str:
 
 
 @mcp.tool()
+def whetstone_metabolism(output_dir: str | None = None) -> str:
+    """Write a safe bank-sustainability report from append-only mint, promotion,
+    retirement, and burn events. It exposes rates and no item contents."""
+    return json.dumps(metabolism_impl(output_dir), sort_keys=True)
+
+
+@mcp.tool()
 def whetstone_mint(domain: str, max_items: int = 8, seed: int = 0, buffers: list[str] | None = None) -> str:
     """Mint exam items for a domain (coloring, mis, playground, code, support).
     Pass training-buffer paths so the leakage quarantine can check overlap."""
@@ -225,13 +249,14 @@ def whetstone_grade_endpoint(
     api_key_env: str | None = None,
     max_items: int | None = None,
     timeout_seconds: float = 120.0,
+    max_tokens: int = 512,
     allow_external_no_burn: bool = False,
 ) -> str:
     """Grade a candidate behind an OpenAI-compatible endpoint. Non-local hosts
     trigger burn accounting: every exposed item is permanently consumed.
     allow_external_no_burn=True is an on-the-record override, never a default."""
     return json.dumps(
-        grade_endpoint_impl(system, api_base, model, api_key_env, max_items, timeout_seconds, allow_external_no_burn),
+        grade_endpoint_impl(system, api_base, model, api_key_env, max_items, timeout_seconds, max_tokens, allow_external_no_burn),
         sort_keys=True,
     )
 

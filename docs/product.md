@@ -18,6 +18,19 @@ python -m bcv.cli status                                # buckets + metabolism
 
 (Installed via `pip install -e .`, the same commands are just `whetstone ...`.)
 
+For local models, point the same adapter at Ollama or LM Studio; localhost is
+inside the bank trust boundary and does not burn the exam. Reasoning models may
+need a larger completion budget than the default:
+
+```powershell
+whetstone grade --system qwen3 --api-base http://127.0.0.1:11434/v1 `
+  --model qwen3:8b --max-tokens 2048
+```
+
+`results/local_qwen_code_bakeoff.json` records the first local four-item code
+run: qwen2.5-1.5B scored 1/4 and qwen3-8B 2/4; the paired gate held the result
+because one gain is evidence of a difference, not enough evidence to promote.
+
 ## The pieces
 
 **Candidates** (`bcv/candidates.py`) — anything that answers can be graded:
@@ -52,6 +65,16 @@ human verdicts — `whetstone calibrate-panel` reports agreement, false-accepts
 (the dangerous direction), false-rejects, and per-check attribution. The
 shipped support-agent panel scores zero false-accepts on its labeled corpus,
 and the test suite pins that as a tripwire.
+
+That clean corpus is only a smoke calibration, not evidence that support is
+solved. `sample_docs/support_hard_calibration.jsonl` is an explicitly
+expert-authored adversarial corpus: it contains source-worded false claims and
+valid paraphrases. The committed v1 baseline is **0/13 agreement** (6 false
+accepts, 7 false rejects) in `results/support_hard_panel_baseline.json`.
+That failure is intentional and load-bearing: lexical overlap is not support
+correctness. It is the regression target while adding case-specific
+policy/claim checks and later replacing authored labels with independent
+spot-checks.
 
 **The service** (`bcv/service.py`, `whetstone serve`) — GET /status,
 POST /grade, POST /gate over localhost JSON. It accepts answers, never model

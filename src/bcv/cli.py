@@ -77,7 +77,7 @@ def build_candidate(args):
         api_key = os.environ.get(args.api_key_env) if args.api_key_env else None
         return OpenAICompatibleCandidate(
             base_url=args.api_base, model=args.model, api_key=api_key,
-            timeout_seconds=args.timeout,
+            max_tokens=args.max_tokens, timeout_seconds=args.timeout,
         )
     if args.acp:
         from bcv.acp import ACPCandidate
@@ -183,6 +183,8 @@ def cmd_gate(args, config: dict) -> int:
 
 
 def cmd_status(args, config: dict) -> int:
+    from bcv.metabolism import metabolism_summary
+
     bank = open_bank(args, config)
     statuses: dict[str, int] = {}
     domains: dict[str, int] = {}
@@ -204,6 +206,24 @@ def cmd_status(args, config: dict) -> int:
             "retired_to_regression": statuses.get("retired", 0),
             "quarantined": statuses.get("quarantined", 0),
         },
+        "metabolism_history": metabolism_summary(bank.root),
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_metabolism(args, config: dict) -> int:
+    from bcv.metabolism import metabolism_report, write_metabolism_report
+
+    bank = open_bank(args, config)
+    report = metabolism_report(bank.root)
+    output = args.out or str(bank.root / "metabolism")
+    json_path, html_path = write_metabolism_report(bank.root, output)
+    print(json.dumps({
+        "sustainability": report["sustainability"],
+        "events_total": report["events_total"],
+        "current_promoted_supply": report["current_promoted_supply"],
+        "report_json": str(json_path),
+        "report_html": str(html_path),
     }, indent=2, sort_keys=True))
     return 0
 
@@ -320,6 +340,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_grade.add_argument("--acp", help="Agent Client Protocol agent command; whetstone drives it as the ACP client")
     p_grade.add_argument("--max-items", type=int)
     p_grade.add_argument("--timeout", type=float, default=120.0)
+    p_grade.add_argument("--max-tokens", type=int, default=512,
+                         help="maximum completion tokens for an OpenAI-compatible candidate")
     p_grade.add_argument(
         "--allow-external-no-burn", action="store_true",
         help="grade an external endpoint WITHOUT burning exposed items (on-the-record override)",
@@ -338,6 +360,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_status = sub.add_parser("status", help="bank health and metabolism")
     p_status.set_defaults(fn=cmd_status)
+
+    p_metabolism = sub.add_parser("metabolism", help="write the append-only bank supply/burn history report")
+    p_metabolism.add_argument("--out", help="report directory (default: <bank>/metabolism)")
+    p_metabolism.set_defaults(fn=cmd_metabolism)
 
     p_burn = sub.add_parser("burn", help="record an external exposure by hand")
     p_burn.add_argument("--item", required=True)

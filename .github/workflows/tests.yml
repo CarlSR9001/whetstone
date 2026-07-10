@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: [master, whetstone-2]
+    branches: [master]
   pull_request:
 
 jobs:

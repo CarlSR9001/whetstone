@@ -25,7 +25,7 @@ from bcv.graph_repair_data import _candidate_expressions
 from bcv.transformers_client import TransformersLocalClient, extract_json
 
 OUT = "paraphrase_attack_corpus.jsonl"
-MODEL = "Qwen/Qwen2.5-32B-Instruct"
+MODEL = "unsloth/Qwen2.5-32B-Instruct-bnb-4bit"  # pre-quantized: fits the volume quota
 
 PROMPT = """You are attacking a plagiarism-detection system for boolean predicates over graphs.
 Grammar: python-like boolean expressions over these features: n, m, density, max_degree,

@@ -21,13 +21,22 @@ from bcv.registry import grade_bank
 from bcv.transformers_client import TransformersLocalClient
 
 BANK = ".bcv_runs/pod_ladder/bank"
+# qwen25_3b (12/48) and qwen25_7b (17/48) already graded. Remaining rungs use
+# PRE-QUANTIZED checkpoints: the /workspace volume has a ~20 GB quota, and a
+# bnb-on-the-fly "32B 4-bit" load downloads ~65 GB of bf16 shards first.
 LADDER = [
-    ("qwen25_3b", "Qwen/Qwen2.5-3B-Instruct"),
     ("fastcontext_4b", "microsoft/FastContext-1.0-4B-RL"),
-    ("qwen25_7b", "Qwen/Qwen2.5-7B-Instruct"),
-    ("qwen25_14b", "Qwen/Qwen2.5-14B-Instruct"),
-    ("qwen25_32b", "Qwen/Qwen2.5-32B-Instruct"),
+    ("qwen25_14b", "unsloth/Qwen2.5-14B-Instruct-bnb-4bit"),
+    ("qwen25_32b", "unsloth/Qwen2.5-32B-Instruct-bnb-4bit"),
 ]
+
+
+def wipe_model_cache() -> None:
+    """Per-rung cache wipe: the quota holds one big model at a time."""
+    import shutil
+
+    for sub in ("hub", "xet"):
+        shutil.rmtree(f"/workspace/hf_cache/{sub}", ignore_errors=True)
 
 
 def main() -> None:
@@ -55,6 +64,8 @@ def main() -> None:
             )
         except Exception as error:  # a failed rung must not kill the ladder
             print(json.dumps({"system": system, "error": f"{type(error).__name__}: {error}"[:300]}), flush=True)
+        finally:
+            wipe_model_cache()
     print("LADDER DONE", flush=True)
 
 

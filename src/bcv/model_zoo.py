@@ -32,6 +32,17 @@ def load_causal_lm_4bit(model_name: str = FASTCONTEXT):
         from bcv.taste_lora import load_base_model_4bit
 
         return load_base_model_4bit()
+    if "bnb-4bit" in model_name.lower() or model_name.lower().endswith("-4bit"):
+        # Pre-quantized checkpoint: its quantization_config ships in the repo
+        # and passing another one is an error. Also the reason to prefer these
+        # on disk-quota'd hosts — the download is the quantized size, not
+        # full-precision shards (a "32B 4-bit" load otherwise pulls ~65 GB).
+        return AutoModelForCausalLM.from_pretrained(
+            model_name,
+            trust_remote_code=True,
+            device_map={"": 0} if torch.cuda.is_available() else None,
+            torch_dtype=torch.bfloat16,
+        )
     qconfig = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",

@@ -1,0 +1,43 @@
+{
+  "attacker": "unsloth/Qwen2.5-32B-Instruct-bnb-4bit on a rented A40 (controlled infra)",
+  "corpus": {
+    "invalid_rewrites_discarded": 17,
+    "rows": 360,
+    "truly_different": 200,
+    "truly_equivalent_at_horizon": 143,
+    "truth_horizon": "exhaustive n<=6 + stress pool n in {7,8}",
+    "valid": 343
+  },
+  "evidence_scope": "LLM paraphrase attack vs behavioral fingerprints, 2026-07-10",
+  "fingerprint_blind_spot_curve": {
+    "n<=4": {
+      "collisions": 149,
+      "false_merge_rate_of_truly_different": 0.03,
+      "false_merges_vs_truth_horizon": 6
+    },
+    "n<=5": {
+      "collisions": 146,
+      "false_merge_rate_of_truly_different": 0.015,
+      "false_merges_vs_truth_horizon": 3
+    },
+    "n<=6": {
+      "collisions": 143,
+      "false_merge_rate_of_truly_different": 0.0,
+      "false_merges_vs_truth_horizon": 0
+    }
+  },
+  "interpretation": "a false merge at n<=6 is an attack that would evade the deployed quarantine tier while genuinely differing on larger graphs; the curve shows how the blind spot shrinks as the fingerprint corpus grows",
+  "model_claim_accuracy": {
+    "equivalent": {
+      "correct": 105,
+      "rate": 0.621,
+      "total": 169
+    },
+    "near_miss": {
+      "correct": 136,
+      "rate": 0.782,
+      "total": 174
+    }
+  },
+  "note": "expressions are from the public DSL list; no exam bank content involved"
+}

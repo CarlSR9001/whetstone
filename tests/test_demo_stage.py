@@ -24,13 +24,22 @@ def test_story_compiles_from_committed_receipts():
     assert len(story["receipts_on_disk"]) >= 5
 
 
-def test_story_never_leaks_item_content():
-    """The stage is a public-facing surface: no exam prompts or item ids."""
+def test_story_never_leaks_item_content_or_local_paths():
+    """The stage is a public-facing surface: no exam content, no personal paths."""
     blob = json.dumps(demo_stage.compile_story())
     assert "item_id" not in blob
     assert "fen" not in blob
     assert '"moves"' not in blob
     assert "repair_expression" not in blob
+    assert "Users" not in blob and "AI Arch" not in blob
+
+
+def test_story_carries_live_reference_fallback():
+    """The button must never dead-end: a committed real run is always available."""
+    ref = demo_stage.compile_story()["live_reference"]
+    assert ref.get("decision") in ("PASS", "HOLD", "BLOCK")
+    assert ref.get("cached") is True
+    assert ref.get("quarantined", 0) >= 1
 
 
 def test_live_run_executes_real_engine(tmp_path, monkeypatch):

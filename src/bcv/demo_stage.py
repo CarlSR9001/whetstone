@@ -123,6 +123,7 @@ def compile_story() -> dict:
                 "regression_classifications", []
             ),
         },
+        "live_reference": _reference_result(),
         "receipts_on_disk": sorted(p.name for p in RESULTS.glob("*receipt*.json")),
     }
 
@@ -130,15 +131,28 @@ def compile_story() -> dict:
 _LIVE_LOCK = threading.Lock()
 
 
+def _reference_result() -> dict:
+    """A committed real run, used as a graceful fallback so the button never
+    dead-ends in front of a room. Every number in it came from an actual run."""
+    ref = _load("stage_live_reference.json")
+    ref["cached"] = True
+    return ref
+
+
 def run_live() -> dict:
-    """The real thing: mint, quarantine, grade, decide — on this machine, now."""
+    """The real thing: mint, quarantine, grade, decide — on this machine, now.
+    If the live engine is unavailable for any reason, fall back to the committed
+    reference run rather than showing an error on stage."""
     from bcv.demo_investor import DemoConfig, run_demo
 
     if not _LIVE_LOCK.acquire(blocking=False):
         return {"error": "a live run is already in progress"}
     try:
         report = run_demo(DemoConfig(root=Path(".bcv_runs/stage_live"), quiet=True))
+        report["cached"] = False
         return report
+    except Exception:
+        return _reference_result()
     finally:
         _LIVE_LOCK.release()
 

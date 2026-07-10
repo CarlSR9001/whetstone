@@ -543,8 +543,9 @@ still BLOCKED on four gains, one playground regression, and exact p=.375.
 
 ## 18. Product gate, exposure incident, and adversarial calibration
 
-The product layer now emits signed JSON/HTML promotion reports with exact
-McNemar evidence, bank and grade-event hashes, an instrument-resolution
+The product layer now emits hash-committed JSON/HTML promotion reports (each
+carries a SHA-256 commitment to the bank and grade-event state it graded) with
+exact McNemar evidence, an instrument-resolution
 statement, strict or reliability-aware regression policy, and CLI exit codes.
 MCP, ACP, HTTP, command, stored-answer, and local Transformers candidates all
 use the same registry path.

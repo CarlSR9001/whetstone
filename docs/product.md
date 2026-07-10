@@ -9,7 +9,7 @@ exam, pluggable verifiers, a CI contract, and a minimal service.
 ```powershell
 $env:PYTHONPATH='src'
 python -m bcv.cli init                                  # bank + whetstone.toml
-python -m bcv.cli mint --domain code --max-items 8      # exam items, checkers stay private
+python -m bcv.cli mint --domain code --max-items 8      # open reference tasks; candidate never sees the checker
 python -m bcv.cli grade --system v1 --command "python my_agent.py"
 python -m bcv.cli grade --system v2 --command "python my_agent_new.py"
 python -m bcv.cli gate --baseline v1 --candidate v2     # exit code IS the verdict
@@ -108,8 +108,9 @@ whetstone local-bakeoff --out .bcv_runs/my_bakeoff --seed 4 --items 12 `
 ```
 
 The command refuses non-local endpoints and a non-empty output directory. It
-writes the private bank, run manifests, `local_bakeoff.json`, and the signed
-JSON/HTML promotion-gate receipt under `--out`.
+writes the private bank, run manifests, `local_bakeoff.json`, and the
+hash-committed JSON/HTML promotion-gate receipt under `--out` (each carries a
+SHA-256 commitment to the exact bank state it graded).
 
 ## The pieces
 
@@ -131,11 +132,15 @@ verbs: mint, prompt, grade. One bank can mix graph repairs, game moves, code
 tasks, and panel cases; one `grade_bank` call grades across all of them.
 Adding a customer domain means adding one `DomainPlugin`.
 
-**Code domain** (`bcv/code_domain.py`) — the first non-toy domain. Tasks are
-graded by hidden property checks run in an isolated interpreter with a hard
-timeout: round-trips, invariants, brute-force oracles on small inputs. A
+**Code domain** (`bcv/code_domain.py`) — the first non-toy domain, shipped as
+an OPEN reference bank: tasks and checkers are both public so the mechanism is
+fully inspectable. Grading runs the checker in an isolated interpreter with a
+hard timeout: round-trips, invariants, brute-force oracles on small inputs. A
 topological-sort task has exponentially many correct answers; all pass, none
-are stored. There is no answer key to leak.
+are stored — so it stays leak-resistant even with the checker visible, and the
+candidate never sees the checker at grading time. A production bank keeps the
+same mechanism but withholds the checker implementations, exactly as the
+promotion exam bank is withheld from this repo.
 
 **Verifier panels** (`bcv/panel.py`) — the fuzzy-domain fallback: several
 cheap independent checks, each allowed to abstain, aggregated by VETO (the

@@ -1,11 +1,23 @@
-"""Code tasks: the first non-toy exam domain, graded by hidden property checks.
+"""Code tasks: the first non-toy exam domain, an OPEN reference bank.
 
-The whetstone rule, applied to code: the system under exam sees a task
-description; the checker it must satisfy stays private. Checkers verify
-PROPERTIES — round-trips, invariants, brute-force oracles on small inputs —
-so there is no canonical solution string anywhere in the system. A topological
-sort task has exponentially many correct answers; all of them pass, none of
-them are stored.
+This module is a PUBLIC, transparent demonstration of the whetstone mechanism,
+not a private production bank. The tasks and their checkers are both open in
+this file on purpose, so anyone can read exactly how property-based grading
+works. Two properties still hold even with the checker fully visible, and they
+are the point:
+
+- No stored answer. Checkers verify PROPERTIES — round-trips, invariants,
+  brute-force oracles on small inputs — so there is no canonical solution
+  string anywhere. A topological sort has exponentially many correct answers;
+  all pass, none are written down. You cannot memorize what was never stored.
+- The candidate sees the prompt, never the checker, at grading time.
+
+What a PRODUCTION deployment adds on top of this reference set: the checker
+implementations move into a private bank and are withheld from the public
+repo, exactly as the promotion exam bank already is. Because these published
+tasks are open fixtures, they are demonstration material, not durable private
+exam items — anything published here is treated as burned for future promotion
+evidence. The mechanism is what transfers; these specific tasks do not.
 
 Submitted code runs in an isolated subprocess (``python -I``, no inherited
 site-packages or environment, hard wall-clock timeout). That is process
@@ -32,7 +44,10 @@ from bcv.examiner import ExamItem
 class CodeTask:
     task_id: str
     prompt: str  # everything the system under exam sees
-    checker_source: str  # private: defines check(namespace) raising AssertionError
+    # Open in this reference bank; withheld in a production bank. Defines
+    # check(namespace) raising AssertionError. Verifies properties, not a
+    # stored answer, so it stays leak-resistant even when visible.
+    checker_source: str
 
 
 CODE_TASKS: tuple[CodeTask, ...] = (
@@ -488,11 +503,13 @@ def mint_code_items(
     max_items: int = 8,
     seed: int = 0,
 ) -> list[ExamItem]:
-    """Mint a reproducible, seed-selected slice of the private task library.
+    """Mint a reproducible, seed-selected slice of the OPEN reference task bank.
 
-    A fixed prefix silently makes successive "fresh" banks identical. The
-    seed is therefore selection provenance, not cosmetic randomness: a later
-    audit can recreate the task slice without exposing checkers to candidates.
+    These tasks and checkers are public (see the module docstring): this is
+    demonstration material, and a production bank withholds the checkers. A
+    fixed prefix silently makes successive "fresh" banks identical, so the seed
+    is selection provenance, not cosmetic randomness: a later audit can recreate
+    the exact task slice. Candidates still never see the checker at grading time.
     """
     buffer_paths = buffer_paths or []
     tasks = list(CODE_TASKS)
@@ -509,8 +526,8 @@ def mint_code_items(
             domain="code",
             kind="code_task",
             payload={"task_id": task.task_id, "prompt": task.prompt, "selection_seed": seed},
-            oracle="hidden_property_checks",
-            source="task_library_v2",
+            oracle="open_property_checks",
+            source="reference_task_library_v2",
             horizon="property_checks_v1",
             lineage=[task.task_id],
             leakage_risk=1.0 if leaked else 0.0,

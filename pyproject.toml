@@ -2,7 +2,16 @@
 name = "branching-continual-verification"
 version = "0.1.0"
 description = "Verifier-grounded private exam banks and auditable AI promotion gates."
+readme = "README.md"
 requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+authors = [{ name = "Justin Garringer" }]
+keywords = ["evaluation", "llm", "promotion-gate", "continual-learning", "contamination"]
+classifiers = [
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "torch",
   "transformers",

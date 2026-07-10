@@ -132,9 +132,9 @@
     data overlap, through repeated exposure, through the test simply being visible to the pipeline.
     The score goes up; the ability doesn't. Nobody finds out until production.</p>
     <p>Whetstone is the <strong class="acc">promotion gate</strong>: a private, constantly-refreshed
-    exam the system has provably never seen, graded by exact checkers instead of answer keys, with a
-    statistical decision — <b>PASS</b>, <b>HOLD</b>, or <b>BLOCK</b> — and an audit trail for why
-    every version shipped or didn't.</p>
+    exam, checked against every declared training set so the model hasn't seen it, graded by exact
+    checkers instead of answer keys, with a statistical decision — <b>PASS</b>, <b>HOLD</b>, or
+    <b>BLOCK</b> — and an audit trail for why every version shipped or didn't.</p>
   </div>
   <div class="pipeline">
     <span class="node">training data</span><span class="arr">&rarr;</span>
@@ -154,7 +154,7 @@
   decision with an append-only ledger. The two systems under exam are stored answer policies —
   stand-ins so this runs without a GPU — but every grade is computed live by the verifier.</p></div>
   <button class="run" id="runBtn" onclick="runLive()">Run the live evaluation</button>
-  <div class="live-status" id="liveStatus">idle — takes about fifteen seconds</div>
+  <div class="live-status" id="liveStatus">idle — takes about thirteen seconds</div>
   <div class="live-grid" id="liveGrid" hidden>
     <div class="stat"><div class="v" id="lv-minted">–</div><div class="l">items minted at the frontier</div></div>
     <div class="stat quarantine"><div class="v" id="lv-quarantined">–</div><div class="l">quarantined: training overlap</div></div>
@@ -267,8 +267,22 @@ function domainTable(el, byDomain) {
     `<tr><td>${domain === "coloring" || domain === "mis" ? domain + " (graph repair)" : domain}</td><td>${score}</td></tr>`).join("");
 }
 
+let STORY = null;
+
 async function boot() {
-  const story = await (await fetch("/api/story")).json();
+  let story;
+  try {
+    const resp = await fetch("/api/story");
+    if (!resp.ok) throw new Error("status " + resp.status);
+    story = await resp.json();
+  } catch (e) {
+    document.querySelector(".wrap").insertAdjacentHTML("afterbegin",
+      '<div style="background:var(--block);color:#fff;font-family:var(--mono);' +
+      'font-size:14px;padding:12px 16px;margin-top:10px">Stage server not reachable. ' +
+      'Start it in a terminal:&nbsp; <b>python -m bcv.cli stage</b> &nbsp;then reload this page.</div>');
+    return;
+  }
+  STORY = story;
   const d = story.decision;
 
   $("d-base-total").textContent = d.base.total || "–";
@@ -378,22 +392,27 @@ async function runLive() {
     phase = Math.min(phase + 1, PHASES.length - 1);
     status.textContent = PHASES[phase] + "  (" + ((Date.now() - started) / 1000).toFixed(0) + "s)";
   }, 2300);
+  let r;
   try {
-    const r = await (await fetch("/api/live", { method: "POST" })).json();
-    clearInterval(ticker);
-    if (r.error) { status.textContent = "error: " + r.error; btn.disabled = false; return; }
-    status.textContent = `done in ${r.elapsed_seconds}s — every number below was computed just now`;
-    $("lv-minted").textContent = r.minted;
-    $("lv-quarantined").textContent = r.quarantined;
-    $("lv-scores").textContent = `${r.base_score} vs ${r.candidate_score} of ${r.total_items}`;
-    $("lv-gains").textContent = `${r.gains} / ${r.regressions}`;
-    $("liveGrid").hidden = false;
-    $("liveVerdict").innerHTML = `<span class="verdict-stamp ${r.decision}">${r.decision}</span>`;
-    $("liveFine").hidden = false;
+    r = await (await fetch("/api/live", { method: "POST" })).json();
+    if (r.error) throw new Error(r.error);
   } catch (e) {
-    clearInterval(ticker);
-    status.textContent = "live run unavailable — the committed transcript in results/ is the fallback";
+    // Never dead-end on stage: fall back to the committed real run.
+    r = (STORY && STORY.live_reference) || null;
   }
+  clearInterval(ticker);
+  if (!r) { status.textContent = "run again in a moment"; btn.disabled = false; return; }
+  const live = r.cached === false;
+  status.textContent = live
+    ? `done in ${r.elapsed_seconds}s — every number below was computed just now`
+    : `result from the committed reference run (${r.elapsed_seconds}s) — real numbers, cached`;
+  $("lv-minted").textContent = r.minted;
+  $("lv-quarantined").textContent = r.quarantined;
+  $("lv-scores").textContent = `${r.base_score} vs ${r.candidate_score} of ${r.total_items}`;
+  $("lv-gains").textContent = `${r.gains} / ${r.regressions}`;
+  $("liveGrid").hidden = false;
+  $("liveVerdict").innerHTML = `<span class="verdict-stamp ${r.decision}">${r.decision}</span>`;
+  $("liveFine").hidden = false;
   btn.disabled = false;
 }
 

@@ -9,7 +9,7 @@
   "remediation": {
     "audits": [
       {
-        "bank": "C:/Users/shank/Documents/AI Arch #39/.bcv_runs/examiner",
+        "bank": "<LOCAL_PRIVATE_BANK>",
         "burned": 4,
         "exposed_items_found": 4,
         "go_items_still_reusable": 0,

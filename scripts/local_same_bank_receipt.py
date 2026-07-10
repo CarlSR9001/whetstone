@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -25,10 +26,9 @@ from bcv.transformers_client import TransformersLocalClient, extract_json
 
 
 DEFAULT_BANK = ".bcv_runs/pod_sync/bank"
-DEFAULT_ADAPTER = (
-    r"C:\Users\shank\Documents\AI Arch #39\.bcv_runs\cook2\gen2"
-    r"\fastcontext_graph_repair_lora"
-)
+# The gen-2 adapter path is a local private artifact; supply it explicitly via
+# --adapter or the WHETSTONE_ADAPTER_PATH env var (no personal paths in-repo).
+DEFAULT_ADAPTER = os.environ.get("WHETSTONE_ADAPTER_PATH")
 
 
 class RecordingCandidate:
@@ -148,7 +148,8 @@ def gate_summary(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local FastContext same-bank receipt")
     parser.add_argument("--bank", default=DEFAULT_BANK)
-    parser.add_argument("--adapter", default=DEFAULT_ADAPTER)
+    parser.add_argument("--adapter", default=DEFAULT_ADAPTER,
+                        help="local gen-2 adapter path; or set WHETSTONE_ADAPTER_PATH")
     parser.add_argument("--base-system", default="fastcontext_4b_base_local")
     parser.add_argument("--adapter-system", default="fastcontext_4b_gen2_local")
     parser.add_argument("--max-tokens", type=int, default=384)

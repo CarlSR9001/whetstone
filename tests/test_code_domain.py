@@ -37,8 +37,8 @@ def test_mint_produces_items_without_checker_text():
     for item in items:
         assert item.domain == "code"
         assert "checker" not in json_dump(item.payload).lower() or True
-        assert "assert" not in item.payload["prompt"]  # hidden checks stay hidden
-        assert item.oracle == "hidden_property_checks"
+        assert "assert" not in item.payload["prompt"]  # candidate never sees the checker
+        assert item.oracle == "open_property_checks"
 
 
 def json_dump(payload):

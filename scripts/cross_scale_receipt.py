@@ -137,7 +137,7 @@ def main() -> None:
             "item_content_sha256": item_content_sha256,
             "stock_grade_events_sha256": stock_grade_events_sha256,
             "composition": "12 coloring repairs + 12 MIS repairs (checker-spec, no answer keys) "
-            "+ 24 hidden-property-check code tasks",
+            "+ 24 open-reference property-check code tasks",
             "grading": "production registry: live stress pools, isolated-subprocess checkers",
         },
         "ladder": ladder,

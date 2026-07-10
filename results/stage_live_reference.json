@@ -1,0 +1,12 @@
+{
+  "base_score": 0,
+  "cached": true,
+  "candidate_score": 6,
+  "decision": "PASS",
+  "elapsed_seconds": 12.5,
+  "gains": 6,
+  "minted": 12,
+  "quarantined": 5,
+  "regressions": 0,
+  "total_items": 7
+}

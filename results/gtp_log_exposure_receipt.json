@@ -26,7 +26,7 @@
         "mode": "burn"
       },
       {
-        "bank": "C:/Users/shank/Documents/AI Arch #39/.bcv_runs/examiner",
+        "bank": "<LOCAL_PRIVATE_BANK>",
         "burned": 0,
         "exposed_items_found": 4,
         "go_items_still_reusable": 4,

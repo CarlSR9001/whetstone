@@ -27,6 +27,10 @@ Selected results (full ledger with methods, nulls, and receipts in
 - Ran a full unattended continual-learning loop: cold-start 0/8 -> 8/8 in one
   gated round; the multi-domain generation cracked a cross-domain frontier its
   own examiner had exposed (base 1/33 -> gen-2 4/33, first MIS pass).
+- Closed the same-bank scale comparison locally: stock Qwen2.5 1.5B->32B rose
+  8->20/48 while every stock model scored 0/24 on graph repairs; the task-routed
+  verifier-trained FastContext-4B scored 28/48 and earned PASS over its 22/48
+  base (6 gains, 0 regressions, exact p=.03125), repeated identically three times.
 - The private promotion exam bank is deliberately NOT in this repo: publishing it
   would let future models train on it — the leakage rule at internet scale.
 
@@ -56,6 +60,11 @@ bank's exposure accounting; the promotion report carries paired evidence, an
 exact McNemar p-value, the bank's own resolution statement, and a SHA-256
 commitment to bank state. No surface, human or agent, ever serves exam item
 contents.
+
+Support-panel minting currently fails closed by default: the lexical checker
+passed its clean smoke corpus but failed 13/13 adversarial cases, so it cannot
+mint promotion-capable support items until an independently reviewed hard
+calibration is supplied explicitly.
 
 ## The sixty-second demo
 

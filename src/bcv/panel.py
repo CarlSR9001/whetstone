@@ -27,7 +27,12 @@ from typing import Callable, Iterable
 
 from bcv.examiner import ExamItem
 
-DEFAULT_SUPPORT_CALIBRATION = Path(__file__).resolve().parents[2] / "results" / "support_panel_calibration.json"
+SMOKE_SUPPORT_CALIBRATION = Path(__file__).resolve().parents[2] / "results" / "support_panel_calibration.json"
+# The shipped 14-case calibration is deliberately only a smoke test. The same
+# lexical panel scored 0/13 on the adversarial corpus, including six dangerous
+# false accepts, so production minting must fail closed until an independently
+# reviewed hard calibration is supplied explicitly.
+DEFAULT_SUPPORT_CALIBRATION: Path | None = None
 
 Verdict = str  # "pass" | "fail" | "abstain"
 
@@ -213,11 +218,12 @@ def mint_support_items(
     max_items: int = 8,
     research_mode: bool = False,
 ) -> list[ExamItem]:
-    """Support exam items, admitted only through a calibration gate.
+    """Support exam items, admitted only through an explicit calibration gate.
 
-    ``research_mode`` permits an explicitly non-production bank experiment, but
-    callers must opt into it; absence of a trustworthy panel never defaults to
-    a promotion-capable support bank.
+    The historical clean corpus is a smoke test, not a production admission
+    credential. ``research_mode`` permits an explicitly non-production bank
+    experiment, but callers must opt into it; absence of a trustworthy hard
+    calibration never defaults to a promotion-capable support bank.
     """
     calibration = load_calibration(calibration_path) if calibration_path else None
     if not research_mode and not calibration_admissible(calibration):

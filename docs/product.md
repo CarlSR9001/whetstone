@@ -47,6 +47,22 @@ turn the round into a promotion: the paired 33-item gate remained **BLOCK**
 with one playground regression and p=.375. The receipt is sanitized; private
 prompts, outputs, item IDs, and adapter paths stay in ignored local artifacts.
 
+The cross-scale bank now has the missing trained-student comparison on the
+identical 48-item cohort. The cached FastContext-4B base scored 22/48
+(21/24 code, 1/24 graph); gen-2 scored 26/48 (19/24 code, 7/24 graph) but
+correctly BLOCKED on two stable code regressions across three identical fresh
+loads. Gen-3 is a mechanism change, not another training round: one PEFT model
+enables gen-2 only for graph-repair prompts and disables the adapter elsewhere.
+It scored 28/48 and earned PASS over base with six gains, zero regressions, and
+exact p=.03125, again with one identical item vector across three fresh loads.
+See `results/local_fastcontext_same_bank_receipt.json` and
+`results/local_fastcontext_gen3_routed_receipt.json`.
+
+Against stock Qwen2.5-32B on that same bank, routed gen-3 has nine gains and one
+regression (28/48 vs 20/48, p=.021484375), so the strict zero-regression policy
+still BLOCKS that comparison. Aggregate superiority does not erase an item-level
+regression.
+
 `results/redteam_gate_receipt.json` records the hostile self-test: a semantic
 paraphrase evaded row identity but the behavioral fingerprint quarantined it;
 and a toy memorizer's six leaked-item wins would have produced an unsafe PASS,
@@ -54,11 +70,20 @@ while the protected bank issued HOLD. It is evidence for these attacks, not a
 claim that the leakage defense is complete.
 
 The former chess/Go volume ceiling has been addressed in a separate private
-engine bank. `results/engine_volume_receipt.json` records 17 Stockfish frontier
-items and 47 KataGo frontier items (64 total, zero exposure). These are new
-capacity, not scores: no candidate has yet been graded on that bank. The mills
-now accept explicit tool and bank paths, so they can run without copying
-gitignored engines into a worktree:
+engine bank. After the published-log burn and randomized-opening replenishment,
+the retained bank holds 17 Stockfish and 52 KataGo items. Three fresh-load
+grades of shallow and mid engine tiers produced a latest 17/69 vs 27/69 result;
+the gate still BLOCKED on one stable chess regression and p=.0524788. See
+`results/engine_bank_bakeoff_receipt.json` and
+`results/engine_bank_replenishment_receipt.json`. The mills accept explicit
+tool and bank paths, so they can run without copying gitignored engines into a
+worktree:
+
+The published-GTP-log incident is enforced in defaults now: HEAD carries only
+SHA-256 commitments to the 22 permanently public move prefixes, so a fresh
+clone can quarantine collisions without republishing the trajectories. Go
+milling uses an unseeded 4-8-stone random opening by default; disabling the
+mint-time check remains an explicit research override.
 
 ```powershell
 python -m bcv.grandmaster --mill 500 --mint-exams --per-bank 500 `
@@ -131,6 +156,11 @@ correctness. It is the regression target while adding case-specific
 policy/claim checks and later replacing authored labels with independent
 spot-checks.
 
+Accordingly, support minting now fails closed by default. The clean 14-case
+artifact is available only when supplied explicitly as a smoke fixture; the
+registry cannot silently use it to mint promotion-capable support items after
+the hard corpus disproved the panel.
+
 `results/support_hard_semantic_qwen3_baseline.json` records the first
 local-model research pass: a qwen3:8b semantic veto panel reaches 12/13
 agreement on the same adversarial cases (0 false rejects), but has **one false
@@ -164,6 +194,10 @@ promotion. See [ci-example.yml](ci-example.yml). The gate report (JSON + a
 self-contained HTML page with the paired evidence, the exact McNemar p-value,
 and a SHA-256 commitment to the bank state) is the artifact you attach to the
 release — the receipt for why this version shipped.
+
+The repository's own test suite runs in `.github/workflows/tests.yml`; the
+private-bank promotion example remains separate because it requires a
+self-hosted runner holding the gitignored bank.
 
 After repeated grading, use `whetstone gate --regression-policy
 reliability_aware` to distinguish a flip on a historically stable item (fatal)

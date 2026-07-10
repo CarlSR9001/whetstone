@@ -7,6 +7,7 @@ import pytest
 
 from bcv.panel import (
     Check,
+    SMOKE_SUPPORT_CALIBRATION,
     SUPPORT_PANEL,
     VerifierPanel,
     calibration_admissible,
@@ -70,7 +71,9 @@ def test_support_panel_separates_good_from_bad():
 
 
 def _item():
-    return mint_support_items([TICKET], max_items=1)[0]
+    return mint_support_items(
+        [TICKET], calibration_path=SMOKE_SUPPORT_CALIBRATION, max_items=1
+    )[0]
 
 
 def test_item_prompt_contains_source_but_not_checks():
@@ -113,3 +116,8 @@ def test_support_panel_admission_refuses_the_measured_hard_failure():
         mint_support_items([TICKET], calibration_path=hard)
     research = mint_support_items([TICKET], calibration_path=hard, research_mode=True)
     assert research[0].payload["research_mode"] is True
+
+
+def test_support_panel_has_no_production_default_after_hard_failure():
+    with pytest.raises(ValueError, match="not admission-calibrated"):
+        mint_support_items([TICKET])

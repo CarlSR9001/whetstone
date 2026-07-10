@@ -1,7 +1,7 @@
 [project]
 name = "branching-continual-verification"
 version = "0.1.0"
-description = "Cognitive Git runtime and conservation-law editing experiments."
+description = "Verifier-grounded private exam banks and auditable AI promotion gates."
 requires-python = ">=3.11"
 dependencies = [
   "torch",
@@ -9,6 +9,8 @@ dependencies = [
   "peft",
   "bitsandbytes",
   "sentencepiece",
+  "mcp>=1.0",
+  "python-chess>=1.999",
 ]
 
 [project.scripts]

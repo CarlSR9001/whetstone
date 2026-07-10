@@ -61,3 +61,17 @@ def test_mint_gate_can_be_disabled_explicitly(tmp_path, monkeypatch):
         [_row(["E5", "C5"])], per_bank=4, bank_root=tmp_path / "bank", check_published=False
     )
     assert added == 1  # research-mode override is explicit, never a default
+
+
+def test_mint_gate_uses_committed_hash_when_raw_logs_are_absent(tmp_path, monkeypatch):
+    moves = ["D4", "F6"]
+    monkeypatch.setattr(exposure_audit, "known_published_prefixes", lambda: set())
+    monkeypatch.setattr(
+        exposure_audit, "KNOWN_PUBLISHED_PREFIX_HASHES", {exposure_audit.prefix_sha256(moves)}
+    )
+    added = mint_go_exam_items(
+        [_row(moves)], per_bank=4, bank_root=tmp_path / "bank"
+    )
+    assert added == 0
+    item = next(iter(ExaminerBank(tmp_path / "bank").items.values()))
+    assert item.status == "quarantined"

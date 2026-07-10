@@ -8,7 +8,7 @@ import urllib.request
 import pytest
 
 from bcv.examiner import ExaminerBank
-from bcv.panel import mint_support_items
+from bcv.panel import SMOKE_SUPPORT_CALIBRATION, mint_support_items
 from bcv.service import make_server
 
 TICKET = {
@@ -31,7 +31,9 @@ GOOD_ANSWER = (
 @pytest.fixture
 def server(tmp_path):
     bank = ExaminerBank(tmp_path / "bank")
-    for item in mint_support_items([TICKET], max_items=1):
+    for item in mint_support_items(
+        [TICKET], calibration_path=SMOKE_SUPPORT_CALIBRATION, max_items=1
+    ):
         bank.add(item)
         bank.promote(item.item_id)
     bank.save()

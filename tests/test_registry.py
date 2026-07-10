@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from bcv.candidates import StoredAnswerCandidate
 from bcv.examiner import ExaminerBank
 from bcv.registry import MINTABLE_DOMAINS, REGISTRY, grade_bank, mint_domain
+from bcv.registry import candidate_run_manifest
 
 GOOD_BALANCED = """
 def balanced(s):
@@ -81,3 +82,25 @@ def test_external_burn_can_only_be_skipped_explicitly(tmp_path):
     assert result["burned"] == []
     reloaded = ExaminerBank(tmp_path / "bank")
     assert len(reloaded.promoted_items()) == 2
+
+
+def test_transformers_style_manifest_records_model_without_endpoint_host():
+    class LocalTransformers:
+        backend = "transformers"
+        is_external = False
+        provider = "transformers/example/model"
+        model = "example/model"
+        max_new_tokens = 384
+        model_revision = "abc123"
+        quantization = "nf4_runtime"
+        adapter_sha256 = "d" * 64
+        trust_zone = "local_process"
+        infrastructure = "local_gpu"
+
+    manifest = candidate_run_manifest(LocalTransformers(), None, (7, 8), 0, True)
+    assert manifest["model"] == "example/model"
+    assert manifest["max_tokens"] == 384
+    assert manifest["model_revision"] == "abc123"
+    assert manifest["quantization"] == "nf4_runtime"
+    assert manifest["adapter_sha256"] == "d" * 64
+    assert manifest["trust_zone"] == "local_process"

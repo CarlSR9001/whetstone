@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from bcv.examiner import ExamItem, ExaminerBank
-from bcv.exposure_audit import audit_bank, published_prefixes
+from bcv.exposure_audit import (
+    KNOWN_PUBLISHED_PREFIX_HASHES,
+    audit_bank,
+    is_known_published_prefix,
+    prefix_sha256,
+    published_prefixes,
+)
 
 LOG = """
 2026-07-02 13:52:21-0500: Controller: boardsize 9
@@ -64,3 +70,11 @@ def test_audit_burns_only_published_positions(tmp_path):
     assert reloaded.items["go_exposed"].exposures[0]["provider"] == "public repo"
     assert reloaded.items["go_private"].status == "promoted"
     assert live["go_items_still_reusable"] == 1
+
+
+def test_committed_prefix_hashes_survive_without_raw_logs():
+    assert len(KNOWN_PUBLISHED_PREFIX_HASHES) == 22
+    assert len({prefix_sha256(prefix) for prefix in [("E5",), ("E5", "C5")]}) == 2
+    # The concrete leaked positions are intentionally not repeated in this test;
+    # the committed count and membership helper are the fresh-clone contract.
+    assert is_known_published_prefix([]) is False

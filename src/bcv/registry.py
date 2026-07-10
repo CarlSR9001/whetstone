@@ -213,14 +213,27 @@ def candidate_run_manifest(
         "temperature": 0.0,
         "burn_external": burn_external,
     }
+    if hasattr(candidate, "model"):
+        manifest["model"] = str(candidate.model)
+        max_tokens = getattr(candidate, "max_tokens", getattr(candidate, "max_new_tokens", 0))
+        manifest["max_tokens"] = int(max_tokens or 0)
+        for name in (
+            "model_revision",
+            "quantization",
+            "adapter_sha256",
+            "trust_zone",
+            "infrastructure",
+            "routing_policy",
+        ):
+            value = getattr(candidate, name, None)
+            if value:
+                manifest[name] = str(value)
     if hasattr(candidate, "model") and hasattr(candidate, "host"):
         manifest.update({
             "endpoint_host": str(candidate.host),
-            "model": str(candidate.model),
-            "max_tokens": int(getattr(candidate, "max_tokens", 0)),
             "timeout_seconds": float(getattr(candidate, "timeout_seconds", 0.0)),
         })
-    elif hasattr(candidate, "argv"):
+    if hasattr(candidate, "argv"):
         command = "\0".join(str(part) for part in candidate.argv)
         manifest["command_sha256"] = hashlib.sha256(command.encode("utf-8")).hexdigest()
         manifest["timeout_seconds"] = float(getattr(candidate, "timeout_seconds", 0.0))

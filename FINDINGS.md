@@ -537,14 +537,64 @@ cracked — first MIS exam pass in the system's history)**, playground 3/20 (fro
 move-prediction; those ladders need orders more mill volume, which is free).
 The bank's earlier blindness is also cured: four items now DISCRIMINATE (gen-2
 passes, base fails) — the exam brackets the frontier for the first time, so
-promotion decisions have signal. Open check before gen-2 is promoted over the
-incumbent: regression on the retained coloring probe (not yet re-run) — the gate
-should require no-regression + bank improvement, per the skill-ledger monotonicity
-rule.
+promotion decisions have signal. The retained coloring check was subsequently
+closed: gen-2 verified 4/8 against base 0/8. The full 33-item promotion decision
+still BLOCKED on four gains, one playground regression, and exact p=.375.
+
+## 18. Product gate, exposure incident, and adversarial calibration
+
+The product layer now emits signed JSON/HTML promotion reports with exact
+McNemar evidence, bank and grade-event hashes, an instrument-resolution
+statement, strict or reliability-aware regression policy, and CLI exit codes.
+MCP, ACP, HTTP, command, stored-answer, and local Transformers candidates all
+use the same registry path.
+
+A public KataGo transcript exposed move prefixes that later low-visit mills
+reproduced. Nine affected Go items across the isolated and original banks were
+burned. The permanent remediation is fresh-clone safe: HEAD contains only
+SHA-256 commitments to 22 public prefixes, minting checks those commitments by
+default, and Go mills start from an unseeded 4-8-stone random opening.
+
+The 32B paraphrase attack generated 360 DSL rewrites. Against the stated truth
+horizon, n<=6 fingerprints caught 143/143 equivalent rewrites (zero quarantine
+evasions) and over-quarantined 0/200 distinct rewrites. The one-sided 95% upper
+bound after zero false positives is 1.4867%; this is finite-horizon behavioral
+calibration, not universal semantic duplicate detection.
+
+The fuzzy-domain result failed in the useful direction. The lexical support
+panel scored 0/13 on the hard authored corpus with six false accepts; a local
+qwen3:8b semantic veto reached 12/13 but retained one false accept. Production
+support minting now fails closed until an independently reviewed hard
+calibration is supplied explicitly.
+
+## 19. Same-bank scale ladder and the routed gen-3 PASS
+
+Eight stock models were graded on one 48-item bank. The Qwen2.5 generalist
+ladder rose monotonically from 8/48 at 1.5B to 20/48 at 32B, but every stock
+model scored 0/24 on graph repairs. The 1.5B-vs-32B paired contrast produced
+12 gains, zero regressions, and p=.00048828125; it remains significant after
+Bonferroni correction across all 28 possible pairs (adjusted p=.0137).
+
+The missing trained-student comparison then ran locally on the RTX 5060 using
+the exact same bank, item set, prompt protocol, and 384-token ceiling:
+
+- FastContext-4B base: **22/48** (code 21/24, graph 1/24).
+- Gen-2 adapter: **26/48** (code 19/24, graph 7/24), but **BLOCK** on six gains,
+  two stable code regressions, p=.2890625. Three fresh loads produced one
+  identical 48-item outcome vector.
+- Routed gen-3: **28/48** (code 21/24, graph 7/24). One PEFT model enables the
+  adapter only for repair prompts and disables it elsewhere. Against base it
+  earned **PASS**: six gains, zero regressions, 42 ties, exact p=.03125. Three
+  fresh loads again produced one identical outcome vector.
+
+Against stock Qwen2.5-32B, routed gen-3 has nine gains and one regression
+(p=.021484375), so the strict zero-regression gate still BLOCKS that comparison
+despite the 28/48 vs 20/48 aggregate. This is the intended distinction between
+"higher score" and "earned promotion."
 
 ## Commands
 
 See README ("hard repair dataset", "stress-test", "stress-mined") for the exact
 invocations. `python -m pytest` covers the DSL analysis, dataset invariants
 (no leak, group disjointness, distinct evidence), and the adversarial families
-(64 tests).
+(214 tests in the current suite).

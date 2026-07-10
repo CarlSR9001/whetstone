@@ -1,0 +1,194 @@
+{
+  "bank": {
+    "bank_sha256": "e2da77e78d896f0fdd970330d81047a464019a108be1b6741273d18f08ce227c",
+    "grade_events_sha256": "f97d066b627e8a358b584a73b134f06f46226b81872582b6a377416d5318a6c2",
+    "items": 48
+  },
+  "evidence_scope": "cached FastContext-4B base and gen-2 adapter on the exact 48-item cross-scale bank, 2026-07-10",
+  "gates": [
+    {
+      "baseline": "fastcontext_4b_base_local",
+      "by_domain": {
+        "code": {
+          "gains": 0,
+          "items": 24,
+          "regressions": 2,
+          "ties": 22
+        },
+        "coloring": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        },
+        "mis": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        }
+      },
+      "candidate": "fastcontext_4b_gen2_local",
+      "exact_mcnemar_two_sided_p": 0.2890625,
+      "gains": 6,
+      "reasons": [
+        "2 regression(s) exceed the policy limit of 0"
+      ],
+      "regression_policy": "strict",
+      "regressions": 2,
+      "ties": 40,
+      "verdict": "BLOCK"
+    },
+    {
+      "baseline": "fastcontext_4b_base_local",
+      "by_domain": {
+        "code": {
+          "gains": 0,
+          "items": 24,
+          "regressions": 2,
+          "ties": 22
+        },
+        "coloring": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        },
+        "mis": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        }
+      },
+      "candidate": "fastcontext_4b_gen2_local",
+      "exact_mcnemar_two_sided_p": 0.2890625,
+      "gains": 6,
+      "reasons": [
+        "2 regression(s) are on historically stable item(s)"
+      ],
+      "regression_policy": "reliability_aware",
+      "regressions": 2,
+      "ties": 40,
+      "verdict": "BLOCK"
+    },
+    {
+      "baseline": "qwen25_32b",
+      "by_domain": {
+        "code": {
+          "gains": 2,
+          "items": 24,
+          "regressions": 3,
+          "ties": 19
+        },
+        "coloring": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        },
+        "mis": {
+          "gains": 4,
+          "items": 12,
+          "regressions": 0,
+          "ties": 8
+        }
+      },
+      "candidate": "fastcontext_4b_gen2_local",
+      "exact_mcnemar_two_sided_p": 0.14599609375,
+      "gains": 9,
+      "reasons": [
+        "3 regression(s) exceed the policy limit of 0"
+      ],
+      "regression_policy": "strict",
+      "regressions": 3,
+      "ties": 36,
+      "verdict": "BLOCK"
+    }
+  ],
+  "hardware": "NVIDIA GeForce RTX 5060, local trust boundary",
+  "sanitization": "counts, failure stages, and hashes only; no item ids, prompts, raw outputs, or adapter paths",
+  "systems": {
+    "fastcontext_4b_base_local": {
+      "by_domain": {
+        "code": "21/24",
+        "coloring": "0/12",
+        "mis": "1/12"
+      },
+      "failure_stages": {
+        "code:checker_reject": 3,
+        "code:pass": 21,
+        "coloring:invalid_dsl": 3,
+        "coloring:output_contract_failure": 2,
+        "coloring:verifier_reject": 7,
+        "mis:output_contract_failure": 2,
+        "mis:pass": 1,
+        "mis:verifier_reject": 9
+      },
+      "response_set_sha256": "98010327670fce106a3b95081bd7ddfb6507911ed9d8834bea626336be72bd06",
+      "run_manifest": {
+        "adapter": "RecordingCandidate",
+        "backend": "transformers",
+        "burn_external": true,
+        "elapsed_seconds": 1310.093,
+        "external": false,
+        "infrastructure": "rtx_5060",
+        "item_set_sha256": "a7fa2c9dd0190aa8ebb4511080b3b2e23672061582fcff4621ad6b4e2c59f39f",
+        "items_graded": 48,
+        "max_items": null,
+        "max_tokens": 384,
+        "model": "microsoft/FastContext-1.0-4B-RL",
+        "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+        "quantization": "nf4_runtime",
+        "seed": 0,
+        "stress_ns": [
+          7,
+          8
+        ],
+        "temperature": 0.0,
+        "trust_zone": "local_process"
+      },
+      "total": "22/48"
+    },
+    "fastcontext_4b_gen2_local": {
+      "by_domain": {
+        "code": "19/24",
+        "coloring": "3/12",
+        "mis": "4/12"
+      },
+      "failure_stages": {
+        "code:checker_reject": 5,
+        "code:pass": 19,
+        "coloring:pass": 3,
+        "coloring:verifier_reject": 9,
+        "mis:pass": 4,
+        "mis:verifier_reject": 8
+      },
+      "response_set_sha256": "279f50ced5db4312ee577f5e1e461c3ac8e8d2004bc1c191d1e9ff6542ffa9cc",
+      "run_manifest": {
+        "adapter": "RecordingCandidate",
+        "adapter_sha256": "edddf67cb4100874301ea6385f6a948b6093e49aaddfbf3b4a8cda025527ee44",
+        "backend": "transformers",
+        "burn_external": true,
+        "elapsed_seconds": 317.705,
+        "external": false,
+        "infrastructure": "rtx_5060",
+        "item_set_sha256": "a7fa2c9dd0190aa8ebb4511080b3b2e23672061582fcff4621ad6b4e2c59f39f",
+        "items_graded": 48,
+        "max_items": null,
+        "max_tokens": 384,
+        "model": "microsoft/FastContext-1.0-4B-RL",
+        "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+        "quantization": "nf4_runtime",
+        "seed": 0,
+        "stress_ns": [
+          7,
+          8
+        ],
+        "temperature": 0.0,
+        "trust_zone": "local_process"
+      },
+      "total": "26/48"
+    }
+  }
+}

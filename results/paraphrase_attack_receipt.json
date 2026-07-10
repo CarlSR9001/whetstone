@@ -9,24 +9,36 @@
     "valid": 343
   },
   "evidence_scope": "LLM paraphrase attack vs behavioral fingerprints, 2026-07-10",
-  "fingerprint_blind_spot_curve": {
+  "fingerprint_calibration_curve": {
     "n<=4": {
       "collisions": 149,
-      "false_merge_rate_of_truly_different": 0.03,
-      "false_merges_vs_truth_horizon": 6
+      "false_negative_rate": 0.0,
+      "false_negatives_equivalent_evaded": 0,
+      "false_positive_rate": 0.03,
+      "false_positives_distinct_overquarantined": 6,
+      "true_negatives_distinct_allowed": 194,
+      "true_positives_equivalent_caught": 143
     },
     "n<=5": {
       "collisions": 146,
-      "false_merge_rate_of_truly_different": 0.015,
-      "false_merges_vs_truth_horizon": 3
+      "false_negative_rate": 0.0,
+      "false_negatives_equivalent_evaded": 0,
+      "false_positive_rate": 0.015,
+      "false_positives_distinct_overquarantined": 3,
+      "true_negatives_distinct_allowed": 197,
+      "true_positives_equivalent_caught": 143
     },
     "n<=6": {
       "collisions": 143,
-      "false_merge_rate_of_truly_different": 0.0,
-      "false_merges_vs_truth_horizon": 0
+      "false_negative_rate": 0.0,
+      "false_negatives_equivalent_evaded": 0,
+      "false_positive_rate": 0.0,
+      "false_positives_distinct_overquarantined": 0,
+      "true_negatives_distinct_allowed": 200,
+      "true_positives_equivalent_caught": 143
     }
   },
-  "interpretation": "a false merge at n<=6 is an attack that would evade the deployed quarantine tier while genuinely differing on larger graphs; the curve shows how the blind spot shrinks as the fingerprint corpus grows",
+  "interpretation": "At n<=6 the fingerprint caught every rewrite equivalent at the stated truth horizon (zero quarantine evasions) and over-quarantined none of the truth-distinct rewrites. This is finite-horizon behavioral calibration, not universal semantic duplicate detection.",
   "model_claim_accuracy": {
     "equivalent": {
       "correct": 105,
@@ -39,5 +51,9 @@
       "total": 174
     }
   },
-  "note": "expressions are from the public DSL list; no exam bank content involved"
+  "note": "expressions are from the public DSL list; no exam bank content involved",
+  "uncertainty": {
+    "distinct_pairs": 200,
+    "one_sided_95pct_upper_bound_on_false_positive_rate_after_zero_errors": 0.014867
+  }
 }

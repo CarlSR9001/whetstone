@@ -48,6 +48,8 @@ def main() -> None:
             client = TransformersLocalClient(model_name=model_name, max_new_tokens=384)
             client.is_external = False
             client.provider = f"runpod_a40/{model_name}"
+            client.trust_zone = "operator_controlled_rented_gpu"
+            client.infrastructure = "runpod_a40"
             report = grade_bank(bank, system=system, candidate=client)
             client.unload()
             print(json.dumps({"system": system, "passed": report["passed"], "items": report["items"],

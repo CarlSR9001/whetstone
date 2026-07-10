@@ -1,0 +1,130 @@
+{
+  "bank": {
+    "bank_sha256": "e2da77e78d896f0fdd970330d81047a464019a108be1b6741273d18f08ce227c",
+    "grade_events_sha256": "f97d066b627e8a358b584a73b134f06f46226b81872582b6a377416d5318a6c2",
+    "items": 48
+  },
+  "evidence_scope": "task-routed FastContext-4B gen-3 on the exact 48-item cross-scale bank, 2026-07-10",
+  "gates": [
+    {
+      "baseline": "fastcontext_4b_base_local",
+      "by_domain": {
+        "code": {
+          "gains": 0,
+          "items": 24,
+          "regressions": 0,
+          "ties": 24
+        },
+        "coloring": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        },
+        "mis": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        }
+      },
+      "candidate": "fastcontext_4b_gen3_routed_local",
+      "exact_mcnemar_two_sided_p": 0.03125,
+      "gains": 6,
+      "reasons": [
+        "no regressions, retained probe held, and paired evidence passed the confidence threshold"
+      ],
+      "regression_policy": "strict",
+      "regressions": 0,
+      "ties": 42,
+      "verdict": "PASS"
+    },
+    {
+      "baseline": "qwen25_32b",
+      "by_domain": {
+        "code": {
+          "gains": 2,
+          "items": 24,
+          "regressions": 1,
+          "ties": 21
+        },
+        "coloring": {
+          "gains": 3,
+          "items": 12,
+          "regressions": 0,
+          "ties": 9
+        },
+        "mis": {
+          "gains": 4,
+          "items": 12,
+          "regressions": 0,
+          "ties": 8
+        }
+      },
+      "candidate": "fastcontext_4b_gen3_routed_local",
+      "exact_mcnemar_two_sided_p": 0.021484375,
+      "gains": 9,
+      "reasons": [
+        "1 regression(s) exceed the policy limit of 0"
+      ],
+      "regression_policy": "strict",
+      "regressions": 1,
+      "ties": 38,
+      "verdict": "BLOCK"
+    }
+  ],
+  "hardware": "NVIDIA GeForce RTX 5060, local trust boundary",
+  "mechanism": "one PEFT model; graph-repair prompts enable gen-2, all other prompts disable the adapter",
+  "repeated_grading": {
+    "fresh_model_load_per_run": true,
+    "runs": 3,
+    "scores": [
+      28,
+      28,
+      28
+    ],
+    "unique_item_outcome_vectors": 1
+  },
+  "sanitization": "counts, failure stages, and hashes only; no item ids, prompts, raw outputs, or adapter paths",
+  "system": {
+    "by_domain": {
+      "code": "21/24",
+      "coloring": "3/12",
+      "mis": "4/12"
+    },
+    "failure_stages": {
+      "code:checker_reject": 3,
+      "code:pass": 21,
+      "coloring:pass": 3,
+      "coloring:verifier_reject": 9,
+      "mis:pass": 4,
+      "mis:verifier_reject": 8
+    },
+    "response_set_sha256": "6655cdfc49d0230673bcbada426e6a0ed036396c18a520db26dbdaea20507ad8",
+    "run_manifest": {
+      "adapter": "RecordingCandidate",
+      "adapter_sha256": "edddf67cb4100874301ea6385f6a948b6093e49aaddfbf3b4a8cda025527ee44",
+      "backend": "transformers_routed",
+      "burn_external": true,
+      "elapsed_seconds": 246.4205,
+      "external": false,
+      "infrastructure": "rtx_5060",
+      "item_set_sha256": "a7fa2c9dd0190aa8ebb4511080b3b2e23672061582fcff4621ad6b4e2c59f39f",
+      "items_graded": 48,
+      "max_items": null,
+      "max_tokens": 384,
+      "model": "microsoft/FastContext-1.0-4B-RL",
+      "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+      "quantization": "nf4_runtime",
+      "routing_policy": "repair_prompt_adapter_else_base",
+      "seed": 0,
+      "stress_ns": [
+        7,
+        8
+      ],
+      "temperature": 0.0,
+      "trust_zone": "local_process"
+    },
+    "total": "28/48"
+  }
+}

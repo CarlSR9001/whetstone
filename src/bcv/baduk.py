@@ -73,7 +73,7 @@ def random_opening_vertices(rng: random.Random, size: int, plies: int) -> list[s
 def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
                       oracle_visits: int = 48, seed: int = 0,
                       katago_dir: str | Path = KATAGO_DIR,
-                      opening_plies: tuple[int, int] = (0, 0),
+                      opening_plies: tuple[int, int] = (4, 8),
                       opening_rng: random.Random | None = None) -> list[dict]:
     """Mill shallow-vs-oracle frontier positions.
 
@@ -146,14 +146,16 @@ def mint_go_exam_items(
     checked against the KNOWN published GTP transcripts at mint time — a
     collision is quarantined on the spot, not discovered by a later audit."""
     from bcv.examiner import ExamItem, ExaminerBank
-    from bcv.exposure_audit import known_published_prefixes
+    from bcv.exposure_audit import is_known_published_prefix, known_published_prefixes
 
     prefixes = known_published_prefixes() if check_published else set()
     bank = ExaminerBank(bank_root) if bank_root else ExaminerBank()
     added = 0
     frontier = [row for row in rows if row["oracle_move"] != row["shallow_move"]]
     for row in frontier[:per_bank]:
-        published = tuple(row["moves"]) in prefixes
+        published = check_published and (
+            tuple(row["moves"]) in prefixes or is_known_published_prefix(row["moves"])
+        )
         item = ExamItem(
             item_id=f"go_{uuid.uuid4().hex[:8]}",
             domain="go",
@@ -189,10 +191,19 @@ def main() -> None:
     parser.add_argument("--root", default=".bcv_runs/go", help="experience output directory")
     parser.add_argument("--bank-root", help="optional isolated bank to receive minted exam items")
     parser.add_argument("--per-bank", type=int, default=4)
+    parser.add_argument(
+        "--opening-plies", type=int, nargs=2, default=(4, 8), metavar=("MIN", "MAX"),
+        help="unseeded random opening length; defaults to 4-8 to prevent trajectory replay",
+    )
     args = parser.parse_args()
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
-    rows = mill_go_positions(args.mill, seed=args.seed, katago_dir=args.katago_dir)
+    rows = mill_go_positions(
+        args.mill,
+        seed=args.seed,
+        katago_dir=args.katago_dir,
+        opening_plies=tuple(args.opening_plies),
+    )
     (root / "experience.jsonl").write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8"
     )

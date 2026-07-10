@@ -9,7 +9,9 @@ GPU proposes, CPU verifier kills, ledger stores the blood.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+from pathlib import Path
 from typing import Any
 
 from bcv.local_model import LocalModelError
@@ -29,8 +31,37 @@ class TransformersLocalClient:
         self.model = model_name or FASTCONTEXT
         self.adapter_path = adapter_path
         self.max_new_tokens = max_new_tokens
+        self.provider = f"transformers/{self.model}"
+        self.is_external = False
+        self.trust_zone = "local_process"
+        self.infrastructure = "local_gpu"
+        self.quantization = (
+            "checkpoint_config"
+            if "bnb-4bit" in self.model.lower() or self.model.lower().endswith("-4bit")
+            else "nf4_runtime"
+        )
+        self.model_revision: str | None = None
+        self.adapter_sha256 = self._adapter_sha256(adapter_path)
         self._model = None
         self._tokenizer = None
+
+    @staticmethod
+    def _adapter_sha256(adapter_path: str | None) -> str | None:
+        if not adapter_path:
+            return None
+        root = Path(adapter_path)
+        model_file = root / "adapter_model.safetensors"
+        config_file = root / "adapter_config.json"
+        digest = hashlib.sha256()
+        found = False
+        for path in (config_file, model_file):
+            if not path.exists():
+                continue
+            found = True
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        return digest.hexdigest() if found else None
 
     def _ensure_loaded(self) -> None:
         if self._model is not None:
@@ -39,6 +70,7 @@ class TransformersLocalClient:
 
         self._tokenizer = load_tokenizer(self.model)
         model = load_causal_lm_4bit(self.model)
+        self.model_revision = getattr(model.config, "_commit_hash", None)
         if self.adapter_path:
             from peft import PeftModel
 
@@ -123,6 +155,32 @@ class TransformersLocalClient:
             if parsed is not None:
                 return parsed
         raise LocalModelError(f"model did not return valid JSON: {last_text[:500]}")
+
+
+class RoutedAdapterCandidate(TransformersLocalClient):
+    """Use a repair adapter only for graph-repair prompts, base weights elsewhere.
+
+    This is a single loaded PEFT model with an explicit task router, not a
+    post-hoc merge of scores. It prevents a specialized adapter from perturbing
+    unrelated code behavior while preserving its graph-repair capability.
+    """
+
+    routing_policy = "repair_prompt_adapter_else_base"
+
+    def __init__(self, adapter_path: str, max_new_tokens: int = 512, model_name: str | None = None) -> None:
+        super().__init__(adapter_path=adapter_path, max_new_tokens=max_new_tokens, model_name=model_name)
+        self.backend = "transformers_routed"
+
+    @staticmethod
+    def uses_adapter(prompt: str) -> bool:
+        return prompt.lstrip().startswith("Repair a rejected conjecture.")
+
+    def generate_text(self, prompt: str, temperature: float = 0.0) -> str:
+        self._ensure_loaded()
+        if self.uses_adapter(prompt):
+            return super().generate_text(prompt, temperature=temperature)
+        with self._model.disable_adapter():
+            return super().generate_text(prompt, temperature=temperature)
 
 
 def extract_json(text: str) -> dict[str, Any] | list[Any] | None:

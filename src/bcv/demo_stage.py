@@ -128,9 +128,6 @@ def compile_story() -> dict:
     }
 
 
-_LIVE_LOCK = threading.Lock()
-
-
 def _reference_result() -> dict:
     """A committed real run, used as a graceful fallback so the button never
     dead-ends in front of a room. Every number in it came from an actual run."""
@@ -139,22 +136,67 @@ def _reference_result() -> dict:
     return ref
 
 
-def run_live() -> dict:
-    """The real thing: mint, quarantine, grade, decide — on this machine, now.
-    If the live engine is unavailable for any reason, fall back to the committed
-    reference run rather than showing an error on stage."""
-    from bcv.demo_investor import DemoConfig, run_demo
+class _LiveRun:
+    """One live evaluation at a time, streaming REAL phase events.
 
-    if not _LIVE_LOCK.acquire(blocking=False):
-        return {"error": "a live run is already in progress"}
-    try:
-        report = run_demo(DemoConfig(root=Path(".bcv_runs/stage_live"), quiet=True))
-        report["cached"] = False
-        return report
-    except Exception:
-        return _reference_result()
-    finally:
-        _LIVE_LOCK.release()
+    The engine calls back at each actual pipeline step (buffer written, mint
+    finished, quarantine done, each system graded, decision, retirement) with
+    the numbers it just computed; the page polls and renders events as they
+    arrive. Nothing is animated on a timer — if the engine is slow, the screen
+    is slow, which is exactly the honesty the demo sells."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.events: list[dict] = []
+        self.running = False
+        self.started_at = 0.0
+
+    def _emit(self, phase: str, data: dict) -> None:
+        import time
+
+        with self.lock:
+            self.events.append({
+                "seq": len(self.events),
+                "phase": phase,
+                "data": data,
+                "t": round(time.time() - self.started_at, 1),
+            })
+
+    def start(self) -> dict:
+        import time
+
+        with self.lock:
+            if self.running:
+                return {"error": "a live run is already in progress"}
+            self.running = True
+            self.events = []
+            self.started_at = time.time()
+        threading.Thread(target=self._work, daemon=True).start()
+        return {"started": True}
+
+    def _work(self) -> None:
+        from bcv.demo_investor import DemoConfig, run_demo
+
+        try:
+            report = run_demo(DemoConfig(
+                root=Path(".bcv_runs/stage_live"), quiet=True, on_phase=self._emit,
+            ))
+            report["cached"] = False
+            self._emit("done", report)
+        except Exception as error:
+            fallback = _reference_result()
+            fallback["engine_error"] = f"{type(error).__name__}"
+            self._emit("fallback", fallback)
+        finally:
+            with self.lock:
+                self.running = False
+
+    def snapshot(self, since: int = 0) -> dict:
+        with self.lock:
+            return {"events": self.events[since:], "running": self.running}
+
+
+LIVE = _LiveRun()
 
 
 class StageHandler(BaseHTTPRequestHandler):
@@ -172,27 +214,49 @@ class StageHandler(BaseHTTPRequestHandler):
         self._reply(code, json.dumps(payload, sort_keys=True).encode("utf-8"), "application/json")
 
     def do_GET(self) -> None:
-        path = self.path.split("?")[0].rstrip("/") or "/"
+        raw_path, _, query = self.path.partition("?")
+        path = raw_path.rstrip("/") or "/"
         if path == "/":
             if not PAGE.exists():
                 return self._reply(500, b"docs/stage.html missing", "text/plain")
             return self._reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/story":
             return self._json(200, compile_story())
+        if path == "/api/live_events":
+            since = 0
+            for part in query.split("&"):
+                if part.startswith("since="):
+                    try:
+                        since = int(part.split("=", 1)[1])
+                    except ValueError:
+                        pass
+            return self._json(200, LIVE.snapshot(since))
         return self._json(404, {"error": "unknown path"})
 
     def do_POST(self) -> None:
         if self.path.rstrip("/") == "/api/live":
-            try:
-                return self._json(200, run_live())
-            except Exception as error:
-                return self._json(500, {"error": f"{type(error).__name__}: {error}"})
+            return self._json(200, LIVE.start())
         return self._json(404, {"error": "unknown path"})
 
 
-def serve_stage(port: int = 8990) -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", port), StageHandler)
-    print(f"whetstone stage on http://127.0.0.1:{port}  (localhost only; live run available)")
+def serve_stage(port: int = 8990, open_browser: bool = False) -> None:
+    url = f"http://127.0.0.1:{port}"
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), StageHandler)
+    except OSError:
+        # Port already serving: the stage is (almost certainly) up — just open it.
+        if open_browser:
+            import webbrowser
+
+            webbrowser.open(url)
+            print(f"stage already running — opened {url}")
+            return
+        raise
+    print(f"whetstone stage on {url}  (localhost only; live run available)")
+    if open_browser:
+        import webbrowser
+
+        threading.Timer(0.6, webbrowser.open, args=(url,)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -208,4 +272,5 @@ if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parents[2]
     os.chdir(repo_root)
     sys.path.insert(0, str(repo_root / "src"))
-    serve_stage(int(sys.argv[1]) if len(sys.argv) > 1 else 8990)
+    args = [a for a in sys.argv[1:] if a != "--open"]
+    serve_stage(int(args[0]) if args else 8990, open_browser="--open" in sys.argv)

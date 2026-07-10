@@ -42,10 +42,27 @@ def test_story_carries_live_reference_fallback():
     assert ref.get("quarantined", 0) >= 1
 
 
-def test_live_run_executes_real_engine(tmp_path, monkeypatch):
-    monkeypatch.chdir(demo_stage.RESULTS.parent if demo_stage.RESULTS.exists() else tmp_path)
-    report = demo_stage.run_live()
-    # It ran the real demo: quarantine fired, a decision came out, ledger written.
-    assert report["quarantined"] >= 1
-    assert report["decision"] in ("PASS", "HOLD", "BLOCK")
-    assert report["total_items"] >= 1
+def test_live_run_streams_real_phase_events():
+    """The step rail is honest: events arrive in pipeline order with the
+    engine's own numbers, and the terminal event carries the full report."""
+    import time
+
+    runner = demo_stage._LiveRun()
+    assert runner.start() == {"started": True}
+    assert runner.start() == {"error": "a live run is already in progress"}
+    deadline = time.time() + 90
+    while runner.snapshot()["running"] and time.time() < deadline:
+        time.sleep(0.5)
+    events = runner.snapshot()["events"]
+    phases = [event["phase"] for event in events]
+    assert phases[-1] in ("done", "fallback")
+    if phases[-1] == "done":
+        # Real pipeline order, real numbers.
+        assert phases.index("buffer") < phases.index("mint_start") < phases.index("mint")
+        assert phases.index("quarantine") < phases.index("grade_base") < phases.index("grade_candidate")
+        assert phases.index("decision") < phases.index("retire")
+        quarantine = next(e for e in events if e["phase"] == "quarantine")
+        assert quarantine["data"]["quarantined"] >= 1
+        report = events[-1]["data"]
+        assert report["decision"] in ("PASS", "HOLD", "BLOCK")
+        assert report["cached"] is False

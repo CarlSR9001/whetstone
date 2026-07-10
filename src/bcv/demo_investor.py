@@ -29,6 +29,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from bcv.domains import COLORING, DOMAINS
 from bcv.examiner import (
@@ -64,6 +65,11 @@ class DemoConfig:
     # checker judges the guess live like anything else.
     guess_every: int = 4
     quiet: bool = False
+    # Optional progress hook: called as on_phase(phase_id, payload) at each
+    # REAL pipeline step with the numbers just computed. This is how the demo
+    # stage streams genuine progress — the UI renders what the engine reports,
+    # never a canned animation.
+    on_phase: Callable[[str, dict], None] | None = None
 
 
 @dataclass
@@ -148,6 +154,7 @@ def grade_policy(bank: ExaminerBank, system: str, answers: dict[str, object], po
 
 def run_demo(config: DemoConfig) -> dict:
     say = (lambda *a, **k: None) if config.quiet else print
+    emit = config.on_phase or (lambda phase, data: None)
     started = time.time()
     root = Path(config.root)
     if root.exists():
@@ -168,9 +175,11 @@ def run_demo(config: DemoConfig) -> dict:
     leak_set = training_originals([buffer_path])
     say(f"[1] Student training buffer: {len(leak_set)} distinct originals on disk")
     ledger.record("training_buffer", originals=sorted(leak_set), path=str(buffer_path))
+    emit("buffer", {"originals": len(leak_set)})
 
     # 2. Mint candidate exam items at the verifier frontier.
     say(f"[2] Minting exam items (exact verifier at n<=6, stress pool at n in {config.stress_ns})...")
+    emit("mint_start", {"stress_ns": list(config.stress_ns)})
     minted = mint_repair_items(
         COLORING, [buffer_path], max_items=config.max_repair_items,
         stress_ns=config.stress_ns, seed=config.seed,
@@ -183,6 +192,7 @@ def run_demo(config: DemoConfig) -> dict:
     say(f"    {len(minted)} candidate items minted "
         f"({sum(1 for i in minted if i.kind == 'repair')} repair, "
         f"{sum(1 for i in minted if i.kind == 'game_move')} game-move)")
+    emit("mint", {"minted": len(minted)})
 
     # 3. Quarantine and promote through the real bank.
     bank = ExaminerBank(root / "bank")
@@ -205,6 +215,11 @@ def run_demo(config: DemoConfig) -> dict:
             f"`{item.payload['original_expression']}`")
     say(f"    bank on disk: {bank.root / 'private_promotion_exam.jsonl'}")
     say("")
+    emit("quarantine", {
+        "quarantined": quarantined,
+        "promoted": promoted,
+        "leaked_originals": [i.payload.get("original_expression", "") for i in leaked],
+    })
 
     # What a system actually sees.
     first_repair = next((i for i in bank.promoted_items() if i.kind == "repair"), None)
@@ -229,11 +244,13 @@ def run_demo(config: DemoConfig) -> dict:
     cand_answers = {i.item_id: candidate_answer(i, k, config) for k, i in enumerate(items)}
 
     say("[4] Grading two systems against the private bank (live checker, no answer keys):")
-    base_results = grade_policy(bank, "student_v1_memorizer", base_answers, pools)
-    cand_results = grade_policy(bank, "student_v2_candidate", cand_answers, pools)
-    base_score = sum(base_results.values())
-    cand_score = sum(cand_results.values())
     total = len(items)
+    base_results = grade_policy(bank, "student_v1_memorizer", base_answers, pools)
+    base_score = sum(base_results.values())
+    emit("grade_base", {"score": base_score, "total": total})
+    cand_results = grade_policy(bank, "student_v2_candidate", cand_answers, pools)
+    cand_score = sum(cand_results.values())
+    emit("grade_candidate", {"score": cand_score, "total": total})
     say(f"    student_v1 (memorizer, echoes its training data): {base_score}/{total}")
     say(f"    student_v2 (gate candidate, proposes repairs):    {cand_score}/{total}")
     ledger.record("grades", system="student_v1_memorizer", passed=base_score, of=total)
@@ -252,6 +269,10 @@ def run_demo(config: DemoConfig) -> dict:
         f"-> decision: {decision}")
     ledger.record("promotion_decision", decision=decision,
                   gains=len(gains), regressions=len(regressions))
+    emit("decision", {
+        "gains": len(gains), "regressions": len(regressions),
+        "decision": decision, "discriminating": len(discriminating), "total": total,
+    })
 
     # 7. Saturation and the downward-only flow.
     retired: list[str] = []
@@ -264,6 +285,7 @@ def run_demo(config: DemoConfig) -> dict:
     say("    student training fuel; nothing exposed to training re-enters the bank")
     for item_id in retired:
         ledger.record("retire", item=item_id)
+    emit("retire", {"retired": len(retired), "trainable": len(trainable)})
 
     elapsed = round(time.time() - started, 1)
     say("")

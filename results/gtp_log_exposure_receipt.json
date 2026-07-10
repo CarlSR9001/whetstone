@@ -1,0 +1,40 @@
+{
+  "evidence_scope": "exposure audit of exam banks vs published engine logs, 2026-07-10",
+  "incident": {
+    "amplifier": "low-visit mills are near-deterministic, so the 2026-07-09 mill regenerated trajectories already public \u2014 items minted AFTER the leak were still derivable from it",
+    "past_receipts_impact": "all historical gradings scored 0 on the affected go items, so no published conclusion was inflated by the exposure; the engine-bank bakeoff receipt (26/64 vs 8/64, dual BLOCK) included 5 since-burned items \u2014 direction and significance unaffected (19 gains, needed 6)",
+    "published_position_prefixes": 22,
+    "what": "two KataGo GTP transcripts from the 2026-07-02 mill were committed to the public repo; they contain full play streams of milling games"
+  },
+  "note": "Counts only; auditing a leak must not widen it.",
+  "remediation": {
+    "audits": [
+      {
+        "bank": ".bcv_runs/engine_volume/bank",
+        "burned": 3,
+        "burned_total_across_passes": 5,
+        "exposed_items_found": 3,
+        "go_items_still_reusable": 42,
+        "mode": "burn",
+        "note": "first audit pass had a GTP parser bug (genmove/undo popped a real play) and undercounted; fixed parser re-audited and burned the remainder \u2014 all 5 verified true positives under the fixed parser"
+      },
+      {
+        "bank": ".bcv_runs/examiner",
+        "burned": 0,
+        "exposed_items_found": 0,
+        "go_items_still_reusable": 0,
+        "mode": "burn"
+      },
+      {
+        "bank": "C:/Users/shank/Documents/AI Arch #39/.bcv_runs/examiner",
+        "burned": 0,
+        "exposed_items_found": 4,
+        "go_items_still_reusable": 4,
+        "mode": "dry_run",
+        "note": "ALL FOUR go items in the original private bank are prefix-derivable from the published logs; bank left untouched (frozen for the 2026-07-15 investor demo) \u2014 burn scheduled immediately after"
+      }
+    ],
+    "policy": "engine transcripts are exam content: logDir outputs stay untracked; future mills randomize openings so trajectories are not replayable",
+    "repo": "logs removed from the branch and gitignored; they remain in git history, so every position in them is treated as permanently public"
+  }
+}

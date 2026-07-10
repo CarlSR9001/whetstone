@@ -1,0 +1,97 @@
+{
+  "bank": {
+    "bank_sha256": "9288ecbec63275aac10bce734c66c77b29b87fd184a085a2092ea9d392e6de2c",
+    "horizons": [
+      "d12_vs_d2",
+      "v48_vs_v2"
+    ],
+    "items_graded": 64
+  },
+  "evidence_scope": "isolated local engine-bank bakeoff, 2026-07-10",
+  "gate_reliability_aware": {
+    "exact_mcnemar_two_sided_p": 4.00543212890625e-05,
+    "gains": 19,
+    "reasons": [
+      "1 regression(s) are on historically stable item(s)"
+    ],
+    "regression_classifications": [
+      {
+        "classification": "stable",
+        "domain": "chess",
+        "flip_rate": 0.0
+      }
+    ],
+    "regressions": 1,
+    "resolution": {
+      "additional_clean_discriminators_needed_if_current_outcomes_were_clean": 0,
+      "additional_clean_wins_needed_if_current_regressions_persist": 0,
+      "alpha": 0.05,
+      "best_case_p_if_observed_discordants_were_all_clean": 1.9073486328125e-06,
+      "minimum_clean_discordant_wins": 6,
+      "observed_discordant_items": 20
+    },
+    "ties": 44,
+    "verdict": "BLOCK"
+  },
+  "gate_strict": {
+    "exact_mcnemar_two_sided_p": 4.00543212890625e-05,
+    "gains": 19,
+    "reasons": [
+      "1 regression(s) exceed the policy limit of 0"
+    ],
+    "regression_classifications": [
+      {
+        "classification": "stable",
+        "domain": "chess",
+        "flip_rate": 0.0
+      }
+    ],
+    "regressions": 1,
+    "resolution": {
+      "additional_clean_discriminators_needed_if_current_outcomes_were_clean": 0,
+      "additional_clean_wins_needed_if_current_regressions_persist": 0,
+      "alpha": 0.05,
+      "best_case_p_if_observed_discordants_were_all_clean": 1.9073486328125e-06,
+      "minimum_clean_discordant_wins": 6,
+      "observed_discordant_items": 20
+    },
+    "ties": 44,
+    "verdict": "BLOCK"
+  },
+  "note": "First graded evidence on the engine bank. The receipt omits FENs, move histories, engine moves, and item ids; full reports stay in the private run dir.",
+  "repeated_grading": {
+    "pairing": "verdicts pair the LATEST run; flakiness uses all recorded observations",
+    "repeats": 3,
+    "totals_per_run": {
+      "engine_mid_d8_v16": [
+        "27/64",
+        "30/64",
+        "26/64"
+      ],
+      "engine_shallow_d2_v2": [
+        "14/64",
+        "8/64",
+        "8/64"
+      ]
+    }
+  },
+  "systems": {
+    "baseline": {
+      "by_domain": {
+        "chess": "5/17",
+        "go": "3/47"
+      },
+      "name": "engine_shallow_d2_v2",
+      "note": "same strength tier that milled the frontier; near-zero is the mill working",
+      "total": "8/64"
+    },
+    "candidate": {
+      "by_domain": {
+        "chess": "6/17",
+        "go": "20/47"
+      },
+      "name": "engine_mid_d8_v16",
+      "total": "26/64"
+    }
+  }
+}

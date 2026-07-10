@@ -31,7 +31,8 @@
         "exposed_items_found": 4,
         "go_items_still_reusable": 4,
         "mode": "dry_run",
-        "note": "ALL FOUR go items in the original private bank are prefix-derivable from the published logs; bank left untouched (frozen for the 2026-07-15 investor demo) \u2014 burn scheduled immediately after"
+        "note": "ALL FOUR go items in the original private bank were prefix-derivable from the published logs; burned 2026-07-10 on the founder's instruction (see results/original_bank_burn_receipt.json) \u2014 original bank now holds zero reusable go items pending randomized-opening re-mill",
+        "resolved": true
       }
     ],
     "policy": "engine transcripts are exam content: logDir outputs stay untracked; future mills randomize openings so trajectories are not replayable",

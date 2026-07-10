@@ -62,10 +62,29 @@ class GTPEngine:
         self.process.terminate()
 
 
+def random_opening_vertices(rng: random.Random, size: int, plies: int) -> list[str]:
+    """Distinct random vertices for a non-replayable opening (GTP letters skip I)."""
+    letters = "ABCDEFGHJKLMNOPQRST".replace("I", "")[:size]
+    vertices = [f"{letter}{number}" for letter in letters for number in range(1, size + 1)]
+    rng.shuffle(vertices)
+    return vertices[:plies]
+
+
 def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
                       oracle_visits: int = 48, seed: int = 0,
-                      katago_dir: str | Path = KATAGO_DIR) -> list[dict]:
+                      katago_dir: str | Path = KATAGO_DIR,
+                      opening_plies: tuple[int, int] = (0, 0),
+                      opening_rng: random.Random | None = None) -> list[dict]:
+    """Mill shallow-vs-oracle frontier positions.
+
+    opening_plies=(lo, hi) prepends a RANDOM opening of lo..hi stones before
+    the engine ladder starts. Low-visit ladders from the empty board are
+    near-deterministic, so any published transcript makes future identical
+    mills reconstructible; a random opening makes every trajectory fresh. The
+    opening rng defaults to SystemRandom — deliberately NOT the seeded mill
+    rng, so trajectories are unreproducible even with the seed known."""
     rng = random.Random(seed)
+    opening_rng = opening_rng or random.SystemRandom()
     shallow = GTPEngine(shallow_visits, katago_dir)
     oracle = GTPEngine(oracle_visits, katago_dir)
     rows: list[dict] = []
@@ -78,6 +97,15 @@ def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
                 engine.send("clear_board")
             moves: list[str] = []
             color = "b"
+            if opening_plies[1] > 0:
+                for vertex in random_opening_vertices(
+                    opening_rng, size, opening_rng.randint(*opening_plies)
+                ):
+                    responses = [engine.send(f"play {color} {vertex}") for engine in (shallow, oracle)]
+                    if any(response.startswith("?") for response in responses):
+                        continue  # illegal for this position; skip the vertex
+                    moves.append(vertex)
+                    color = "w" if color == "b" else "b"
             for ply in range(30):
                 if len(rows) >= count:
                     break
@@ -109,14 +137,23 @@ def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
 
 
 def mint_go_exam_items(
-    rows: list[dict], per_bank: int = 4, bank_root: str | Path | None = None
+    rows: list[dict],
+    per_bank: int = 4,
+    bank_root: str | Path | None = None,
+    check_published: bool = True,
 ) -> int:
+    """Mint frontier rows as exam items. By default every candidate position is
+    checked against the KNOWN published GTP transcripts at mint time — a
+    collision is quarantined on the spot, not discovered by a later audit."""
     from bcv.examiner import ExamItem, ExaminerBank
+    from bcv.exposure_audit import known_published_prefixes
 
+    prefixes = known_published_prefixes() if check_published else set()
     bank = ExaminerBank(bank_root) if bank_root else ExaminerBank()
     added = 0
     frontier = [row for row in rows if row["oracle_move"] != row["shallow_move"]]
     for row in frontier[:per_bank]:
+        published = tuple(row["moves"]) in prefixes
         item = ExamItem(
             item_id=f"go_{uuid.uuid4().hex[:8]}",
             domain="go",
@@ -131,9 +168,13 @@ def mint_go_exam_items(
             source="engine_frontier",
             horizon="v48_vs_v2",
             lineage=["katago_b6c96"],
+            leakage_risk=1.0 if published else 0.0,
+            leakage_match="published_gtp_log" if published else "",
         )
+        if published:
+            item.status = "quarantined"
         bank.add(item)
-        if bank.promote(item.item_id):
+        if not published and bank.promote(item.item_id):
             added += 1
     bank.save()
     return added

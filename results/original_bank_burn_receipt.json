@@ -1,0 +1,22 @@
+{
+  "evidence_scope": "exposure audit of exam banks vs published engine logs, 2026-07-10",
+  "incident": {
+    "amplifier": "low-visit mills are near-deterministic, so the 2026-07-09 mill regenerated trajectories already public \u2014 items minted AFTER the leak were still derivable from it",
+    "published_position_prefixes": 22,
+    "what": "two KataGo GTP transcripts from the 2026-07-02 mill were committed to the public repo; they contain full play streams of milling games"
+  },
+  "note": "Counts only; auditing a leak must not widen it.",
+  "remediation": {
+    "audits": [
+      {
+        "bank": "C:/Users/shank/Documents/AI Arch #39/.bcv_runs/examiner",
+        "burned": 4,
+        "exposed_items_found": 4,
+        "go_items_still_reusable": 0,
+        "mode": "burn"
+      }
+    ],
+    "policy": "engine transcripts are exam content: logDir outputs stay untracked; future mills randomize openings so trajectories are not replayable",
+    "repo": "logs removed from the branch and gitignored; they remain in git history, so every position in them is treated as permanently public"
+  }
+}

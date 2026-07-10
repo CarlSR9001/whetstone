@@ -1,0 +1,31 @@
+{
+  "evidence_scope": "engine-bank replenishment after the gtp-log exposure, 2026-07-10",
+  "metabolism": {
+    "consumed_from_supply": 5,
+    "current_promoted_supply": 69,
+    "events_total": 153,
+    "mint_to_consumption_ratio": 14.8,
+    "minted_by_domain": {
+      "chess": 17,
+      "go": 57
+    },
+    "minted_total": 74,
+    "promoted_total": 74,
+    "promotion_to_consumption_ratio": 14.8,
+    "sustainability": "replenishing: minting has outpaced consumption so far",
+    "totals": {
+      "burned": 5,
+      "minted": 74,
+      "promoted": 74
+    }
+  },
+  "note": "Counts only. The full metabolism report (with the supply curve) stays in the private run dir.",
+  "remediation_loop": {
+    "burned_for_exposure": 5,
+    "frontier_rate": "12/40 = 0.30 (down from 0.47 empty-board: random openings land in positions where shallow agrees with the oracle more often \u2014 the price of non-replayability)",
+    "mill_hardening": "randomized 4-8 stone openings from SystemRandom (trajectories unreproducible even with the mill seed known)",
+    "milled_rows": 40,
+    "post_mint_audit_exposed": 0,
+    "promoted_via_mint_time_exposure_gate": 10
+  }
+}

@@ -31,6 +31,19 @@ COMMAND = re.compile(
     r"Controller: (play (?:b|w) [A-Z]\d+|genmove (?:b|w)|undo|clear_board|boardsize \d+)"
 )
 
+# Transcripts known to be public forever (committed 2026-07-02; removing them
+# from HEAD does not unpublish git history). Mint-time gates check against
+# these so a collision is quarantined at birth, not found by a later audit.
+KNOWN_PUBLISHED_LOGS = (
+    "gtp_logs/20260702-135220-0A3CEC6E.log",
+    "gtp_logs/20260702-135220-F796F8D1.log",
+)
+
+
+def known_published_prefixes() -> set[tuple[str, ...]]:
+    present = [path for path in KNOWN_PUBLISHED_LOGS if Path(path).exists()]
+    return published_prefixes(present)
+
 
 def published_prefixes(log_paths: list[str | Path]) -> set[tuple[str, ...]]:
     """Every position (as an ordered vertex tuple) reconstructible from the logs.

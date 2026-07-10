@@ -5,3 +5,4 @@ __pycache__/
 tools/
 results/private/
 *.sqlite3
+gtp_logs/

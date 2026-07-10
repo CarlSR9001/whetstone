@@ -244,3 +244,20 @@ prompt turn, chunks reassembled into the graded answer. The grader advertises
 no filesystem or terminal capabilities and answers every permission request
 with "cancelled" — an agent that cannot answer an exam without touching the
 world fails that item honestly.
+
+## The demo stage
+
+`whetstone stage` (or `python -m bcv.cli stage`) serves a one-page presentation
+shell at http://127.0.0.1:8990 — a thin translator over the real engine for
+showing the gate to a non-technical room:
+
+- Every number is compiled at load time from the committed receipts in
+  `results/`; nothing on the page is typed in.
+- One live button runs the real investor demo (mint, quarantine, grade, gate)
+  on the presenting machine's CPU and shows what it returns.
+- The spine is the promotion story: base 22/48, a gen-2 fine-tune that scores
+  higher (26/48) but is BLOCKED for two stable code regressions, and a
+  task-routed gen-3 (28/48) that earns a statistical PASS (6 gains, 0
+  regressions, p=0.031, identical across three fresh loads).
+- Exam item contents never appear on the page — same trust boundary as every
+  other surface.

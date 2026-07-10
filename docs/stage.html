@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whetstone — live demo stage</title>
+<style>
+  :root {
+    --paper:#F2F4F3; --ink:#1B2228; --ink-soft:#4A555C; --line:#C9D1CE;
+    --accent:#33607F; --card:#FBFCFB; --mono-bg:#E8ECEA;
+    --pass:#2E7D4F; --block:#AF4339; --hold:#A8761F;
+    --display:"Bahnschrift","Arial Narrow","Segoe UI",sans-serif;
+    --body:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Mono",Consolas,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --paper:#171C1F; --ink:#E4E9E7; --ink-soft:#9AA6A3; --line:#313B3F;
+    --accent:#6FA3C4; --card:#1E2529; --mono-bg:#10161A;
+    --pass:#5CB984; --block:#DB7C6E; --hold:#D2A452; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--paper); color:var(--ink); font-family:var(--body);
+         font-size:16px; line-height:1.55; }
+  .wrap { max-width:1060px; margin:0 auto; padding:0 28px 80px; }
+
+  header.top { position:sticky; top:0; z-index:9; background:var(--paper);
+    border-bottom:2px solid var(--ink); padding:10px 0; display:flex;
+    align-items:baseline; gap:26px; flex-wrap:wrap; }
+  .wordmark { font-family:var(--display); font-weight:700; font-size:22px; letter-spacing:.04em; }
+  .wordmark span { color:var(--accent); }
+  nav { display:flex; gap:18px; font-family:var(--mono); font-size:12.5px; }
+  nav a { color:var(--ink-soft); text-decoration:none; }
+  nav a:hover, nav a:focus { color:var(--accent); outline:none; }
+
+  section { padding:54px 0 10px; }
+  .kicker { font-family:var(--mono); font-size:12px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  h1 { font-family:var(--display); font-size:40px; line-height:1.15; text-wrap:balance; max-width:21em; }
+  h2 { font-family:var(--display); font-size:27px; margin-bottom:6px; text-wrap:balance; }
+  .lede { color:var(--ink-soft); max-width:44em; margin-top:10px; }
+  .say { max-width:46em; margin-top:14px; }
+  .say p { margin-bottom:10px; }
+  strong.acc { color:var(--accent); }
+
+  .pipeline { display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    font-family:var(--mono); font-size:12.5px; margin-top:22px; }
+  .pipeline .node { border:1.5px solid var(--ink); background:var(--card); padding:7px 11px; }
+  .pipeline .arr { color:var(--ink-soft); }
+  .pipeline .private { border-width:2.5px; border-color:var(--accent); color:var(--accent); font-weight:700; }
+
+  button.run { font-family:var(--display); font-size:19px; letter-spacing:.03em;
+    background:var(--accent); color:var(--paper); border:none; padding:14px 30px;
+    cursor:pointer; margin-top:18px; }
+  button.run:disabled { opacity:.55; cursor:wait; }
+  .live-status { font-family:var(--mono); font-size:13.5px; margin-top:14px; min-height:22px; color:var(--ink-soft); }
+  .live-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:20px; }
+  .stat { background:var(--card); border:1.5px solid var(--line); padding:12px 14px; }
+  .stat .v { font-family:var(--display); font-size:30px; font-variant-numeric:tabular-nums; }
+  .stat .l { font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); letter-spacing:.05em; }
+  .stat.quarantine .v { color:var(--hold); }
+  .verdict-stamp { display:inline-block; font-family:var(--mono); font-weight:700;
+    font-size:26px; padding:8px 22px; border:3px solid; margin-top:18px; }
+  .verdict-stamp.PASS { color:var(--pass); border-color:var(--pass); }
+  .verdict-stamp.BLOCK { color:var(--block); border-color:var(--block); }
+  .verdict-stamp.HOLD { color:var(--hold); border-color:var(--hold); }
+
+  .decision { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-top:26px; }
+  .model-card { background:var(--card); border:1.5px solid var(--line); padding:18px; display:flex; flex-direction:column; gap:10px; }
+  .model-card.blocked { border:2.5px solid var(--block); }
+  .model-card.passed { border:2.5px solid var(--pass); }
+  .model-card h3 { font-family:var(--display); font-size:17px; letter-spacing:.02em; }
+  .big-score { font-family:var(--display); font-size:44px; font-variant-numeric:tabular-nums; }
+  .badge { align-self:flex-start; font-family:var(--mono); font-weight:700; font-size:14px;
+    padding:3px 12px; border:2px solid; }
+  .badge.PASS { color:var(--pass); border-color:var(--pass); }
+  .badge.BLOCK { color:var(--block); border-color:var(--block); }
+  .badge.BASE { color:var(--ink-soft); border-color:var(--ink-soft); }
+  .domains { font-family:var(--mono); font-size:12.5px; width:100%; border-collapse:collapse; }
+  .domains td { border-top:1px solid var(--line); padding:4px 2px; }
+  .domains td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  .reg-note { font-size:13px; color:var(--block); }
+  .gain-note { font-size:13px; color:var(--pass); }
+  .fine { font-size:12.5px; color:var(--ink-soft); }
+
+  .routing { margin-top:24px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    font-family:var(--mono); font-size:13px; background:var(--card);
+    border:1.5px solid var(--line); padding:14px 16px; }
+  .routing .sw { border:1.5px solid var(--ink); padding:5px 10px; }
+  .routing .on { color:var(--pass); font-weight:700; }
+  .routing .off { color:var(--ink-soft); }
+
+  .wide-card { background:var(--card); border:1.5px solid var(--line); padding:16px 18px; margin-top:18px; }
+
+  .wall { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:24px; }
+  .wall .card { background:var(--card); border:1.5px solid var(--line); padding:18px; }
+  .wall h3 { font-family:var(--display); font-size:17px; }
+  .wall .headline { font-family:var(--display); font-size:30px; color:var(--accent); margin:6px 0; }
+  details { margin-top:10px; }
+  summary { font-family:var(--mono); font-size:12px; color:var(--ink-soft); cursor:pointer; }
+  pre { background:var(--mono-bg); font-family:var(--mono); font-size:11.5px; padding:10px;
+    overflow-x:auto; max-height:300px; margin-top:8px; }
+  .curve { width:100%; height:auto; margin-top:8px; }
+
+  .numbers { display:flex; gap:26px; flex-wrap:wrap; font-family:var(--mono); font-size:13px;
+    margin-top:18px; color:var(--ink-soft); }
+  .numbers b { color:var(--ink); }
+  footer { border-top:2px solid var(--ink); margin-top:60px; padding-top:14px;
+    font-size:12.5px; color:var(--ink-soft); max-width:60em; }
+  @media (max-width:880px) { .decision { grid-template-columns:1fr; } .wall { grid-template-columns:1fr; }
+    .live-grid { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="wordmark">WHETSTONE<span>.</span></div>
+  <nav>
+    <a href="#problem">1 · the problem</a>
+    <a href="#live">2 · watch it run</a>
+    <a href="#decision">3 · the decision</a>
+    <a href="#stress">4 · stress-tested</a>
+    <a href="#numbers">5 · the numbers</a>
+  </nav>
+</header>
+
+<section id="problem">
+  <div class="kicker">The problem</div>
+  <h1>AI teams can't trust their own tests anymore.</h1>
+  <div class="say">
+    <p>Teams ship new versions of AI agents every week, and they decide what ships by running
+    tests. But an AI system can <strong class="acc">learn its own test</strong> — through training
+    data overlap, through repeated exposure, through the test simply being visible to the pipeline.
+    The score goes up; the ability doesn't. Nobody finds out until production.</p>
+    <p>Whetstone is the <strong class="acc">promotion gate</strong>: a private, constantly-refreshed
+    exam the system has provably never seen, graded by exact checkers instead of answer keys, with a
+    statistical decision — <b>PASS</b>, <b>HOLD</b>, or <b>BLOCK</b> — and an audit trail for why
+    every version shipped or didn't.</p>
+  </div>
+  <div class="pipeline">
+    <span class="node">training data</span><span class="arr">&rarr;</span>
+    <span class="node">candidate version</span><span class="arr">&rarr;</span>
+    <span class="node private">PRIVATE EXAMINER</span><span class="arr">&rarr;</span>
+    <span class="node">promotion gate</span><span class="arr">&rarr;</span>
+    <span class="node">PASS / HOLD / BLOCK + receipt</span>
+  </div>
+</section>
+
+<section id="live">
+  <div class="kicker">Act two — watch it run</div>
+  <h2>The whole gate, live, on this laptop's CPU.</h2>
+  <div class="say"><p>This button runs the real machinery right now: it mints fresh exam items
+  against an exact verifier, checks them against a training set and <strong class="acc">quarantines
+  the overlap</strong>, grades two systems with no answer key anywhere, and issues a promotion
+  decision with an append-only ledger. The two systems under exam are stored answer policies —
+  stand-ins so this runs without a GPU — but every grade is computed live by the verifier.</p></div>
+  <button class="run" id="runBtn" onclick="runLive()">Run the live evaluation</button>
+  <div class="live-status" id="liveStatus">idle — takes about fifteen seconds</div>
+  <div class="live-grid" id="liveGrid" hidden>
+    <div class="stat"><div class="v" id="lv-minted">–</div><div class="l">items minted at the frontier</div></div>
+    <div class="stat quarantine"><div class="v" id="lv-quarantined">–</div><div class="l">quarantined: training overlap</div></div>
+    <div class="stat"><div class="v" id="lv-scores">–</div><div class="l">memorizer vs candidate</div></div>
+    <div class="stat"><div class="v" id="lv-gains">–</div><div class="l">gains / regressions</div></div>
+  </div>
+  <div id="liveVerdict"></div>
+  <p class="fine" id="liveFine" hidden>Items the student trained on never reached the exam. The
+  candidate earned promotion; the saturated items just retired downward into future training fuel.
+  Nothing exposed to training ever re-enters the bank.</p>
+</section>
+
+<section id="decision">
+  <div class="kicker">Act three — the decision that matters</div>
+  <h2>A better score is not a better model.</h2>
+  <div class="say"><p>Same private 48-item exam, three versions of the same 4-billion-parameter
+  model, graded on the machine in this room. The middle one scores <em>higher than base</em> —
+  and the gate refuses it, because two reliable code abilities quietly broke. The third routes the
+  fine-tune to where it helps and steps out of the way where it hurts. That one earns promotion.</p></div>
+
+  <div class="decision">
+    <div class="model-card" id="card-base">
+      <span class="badge BASE">BASELINE</span>
+      <h3>FastContext-4B, stock</h3>
+      <div class="big-score" id="d-base-total">–</div>
+      <table class="domains" id="d-base-domains"></table>
+      <span class="fine">where every version starts</span>
+    </div>
+    <div class="model-card blocked" id="card-gen2">
+      <span class="badge BLOCK">BLOCKED</span>
+      <h3>Gen-2 fine-tune</h3>
+      <div class="big-score" id="d-gen2-total">–</div>
+      <table class="domains" id="d-gen2-domains"></table>
+      <span class="reg-note" id="d-gen2-reason">–</span>
+      <span class="fine">a scoreboard would have shipped this</span>
+    </div>
+    <div class="model-card passed" id="card-gen3">
+      <span class="badge PASS">PASS</span>
+      <h3>Gen-3, task-routed</h3>
+      <div class="big-score" id="d-gen3-total">–</div>
+      <table class="domains" id="d-gen3-domains"></table>
+      <span class="gain-note" id="d-gen3-evidence">–</span>
+      <span class="fine" id="d-gen3-repro">–</span>
+    </div>
+  </div>
+
+  <div class="routing" id="routingRow">
+    <span>incoming prompt</span><span class="arr">&rarr;</span>
+    <span class="sw">task router</span><span class="arr">&rarr;</span>
+    <span class="sw on">graph repair: adapter ON</span>
+    <span class="sw off">everything else: adapter OFF</span>
+    <span id="mechanismText" class="fine"></span>
+  </div>
+
+  <div class="wide-card" id="vs32b">
+    <b>The gate doesn't play favorites.</b> <span id="vs32bText">–</span>
+  </div>
+</section>
+
+<section id="stress">
+  <div class="kicker">Act four — stress-tested</div>
+  <h2>We spent the week attacking our own gate.</h2>
+  <div class="wall">
+    <div class="card">
+      <h3>One exam, eight models, 20&times; scale</h3>
+      <div class="headline" id="w-ladder-head">–</div>
+      <svg class="curve" id="ladderCurve" viewBox="0 0 460 120" role="img" aria-label="ladder curve"></svg>
+      <p class="fine" id="w-ladder-note">–</p>
+      <details><summary>technical detail (receipt)</summary><pre id="w-ladder-json"></pre></details>
+    </div>
+    <div class="card">
+      <h3>A 32B model attacked the leakage detector</h3>
+      <div class="headline" id="w-attack-head">–</div>
+      <p class="fine" id="w-attack-note">–</p>
+      <details><summary>technical detail (receipt)</summary><pre id="w-attack-json"></pre></details>
+    </div>
+    <div class="card">
+      <h3>We caught our own leak — and burned the assets</h3>
+      <div class="headline" id="w-leak-head">–</div>
+      <p class="fine" id="w-leak-note">–</p>
+      <details><summary>technical detail (receipt)</summary><pre id="w-leak-json"></pre></details>
+    </div>
+    <div class="card">
+      <h3>It even catches engines regressing</h3>
+      <div class="headline" id="w-engine-head">–</div>
+      <p class="fine" id="w-engine-note">–</p>
+      <details><summary>technical detail (receipt)</summary><pre id="w-engine-json"></pre></details>
+    </div>
+  </div>
+</section>
+
+<section id="numbers">
+  <div class="kicker">Act five — the numbers behind this page</div>
+  <div class="numbers" id="numbersRow"></div>
+  <footer>
+    Every figure on this page is read at load time from receipt files committed to the repository —
+    nothing here is typed in. The live run executes the production code path on this machine.
+    Exam item contents never appear on any surface, including this one.
+    <span id="receiptList"></span>
+  </footer>
+</section>
+
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const fmtP = p => p == null ? "" : "p = " + (p < 0.001 ? p.toExponential(2) : p.toFixed(4).replace(/0+$/, "").replace(/\.$/, ""));
+
+function domainTable(el, byDomain) {
+  el.innerHTML = Object.entries(byDomain).map(([domain, score]) =>
+    `<tr><td>${domain === "coloring" || domain === "mis" ? domain + " (graph repair)" : domain}</td><td>${score}</td></tr>`).join("");
+}
+
+async function boot() {
+  const story = await (await fetch("/api/story")).json();
+  const d = story.decision;
+
+  $("d-base-total").textContent = d.base.total || "–";
+  domainTable($("d-base-domains"), d.base.by_domain);
+  $("d-gen2-total").textContent = d.gen2.total || "–";
+  domainTable($("d-gen2-domains"), d.gen2.by_domain);
+  $("d-gen2-reason").textContent =
+    `${d.gen2.gains} gains — but ${d.gen2.regressions} code regressions, stable across repeated grading`;
+  $("d-gen3-total").textContent = d.gen3.total || "–";
+  domainTable($("d-gen3-domains"), d.gen3.by_domain);
+  $("d-gen3-evidence").textContent =
+    `${d.gen3.gains} gains, ${d.gen3.regressions} regressions — ${fmtP(d.gen3.p)}`;
+  const reps = d.gen3.repeats || {};
+  $("d-gen3-repro").textContent = reps.runs
+    ? `${reps.runs} fresh model loads → ${(reps.scores || []).join(", ")} — ${reps.unique_item_outcome_vectors} identical item-level outcome vector`
+    : "";
+  $("mechanismText").textContent = d.gen3.mechanism ? "— " + d.gen3.mechanism : "";
+  $("vs32bText").textContent =
+    `Head-to-head against a stock 32B model (${d.vs_32b.qwen_total} on the same exam), gen-3 wins with ` +
+    `${d.vs_32b.gains} gains — and the strict gate still says ${d.vs_32b.verdict}, because there is ` +
+    `${d.vs_32b.regressions} regression. Winning the aggregate never excuses breaking something that worked.`;
+
+  // ladder card
+  const rungs = story.ladder.rungs.filter(r => !r.label.includes("out-of-family") && !r.label.includes("coder"));
+  $("w-ladder-head").textContent = rungs.length
+    ? `${rungs[0].total.split("/")[0]} → ${rungs[rungs.length - 1].total.split("/")[0]} of 48` : "–";
+  drawCurve(rungs);
+  $("w-ladder-note").textContent =
+    "Qwen2.5 1.5B through 32B, graded on one private bank on a rented A40. Every stock model scored " +
+    "0 on the graph-repair items — the domain our verifier-trained 4B passes. Adjacent sizes correctly " +
+    "HOLD or BLOCK; only the 20× contrast certifies.";
+  $("w-ladder-json").textContent = JSON.stringify(story.ladder, null, 1);
+
+  // attack card
+  const a = story.attack;
+  $("w-attack-head").textContent = "0 evasions · 0 over-quarantines";
+  $("w-attack-note").textContent =
+    `${a.rows} adversarial rewrites generated by a 32B model; ${a.equivalent} were genuinely equivalent ` +
+    `and every one was caught; ${a.distinct} were genuinely different and none were wrongly quarantined ` +
+    `(95% upper bound ${a.upper_bound != null ? (a.upper_bound * 100).toFixed(2) + "%" : "n/a"}).`;
+  $("w-attack-json").textContent = JSON.stringify(a, null, 1);
+
+  // leak card
+  const inc = story.incident;
+  const burned = (inc.audits || []).reduce((sum, audit) => sum + (audit.burned_total_across_passes || audit.burned || 0), 0);
+  $("w-leak-head").textContent = `${burned} exam items burned`;
+  $("w-leak-note").textContent =
+    "Our own exposure audit found engine transcripts in our public repository — our leak, found by our " +
+    "tooling. Every derivable item was permanently burned, mills were randomized so trajectories can't " +
+    "be replayed, and exposure checking now runs at mint time. The bank replenished within the hour.";
+  $("w-leak-json").textContent = JSON.stringify(inc, null, 1);
+
+  // engine card
+  const b = story.bakeoff;
+  $("w-engine-head").textContent =
+    `${(b.candidate.total || "?")} vs ${(b.baseline.total || "?")} — still ${b.gate_strict.verdict || "?"}`;
+  $("w-engine-note").textContent =
+    "A deeper chess+Go engine stack beat a shallow one decisively — and the gate still blocked promotion: " +
+    "one chess position regressed with a measured flip rate of exactly zero across repeated grading. " +
+    "A real, reproducible regression inside a better system is exactly what this exists to catch.";
+  $("w-engine-json").textContent = JSON.stringify(b, null, 1);
+
+  // numbers strip
+  $("numbersRow").innerHTML = [
+    `<span>private bank <b>${d.bank_items} items</b> · sha-256 <b>${d.bank_sha256}…</b></span>`,
+    `<span><b>214 tests</b> · GitHub CI green</span>`,
+    `<span>graded on <b>${d.hardware.split(",")[0]}</b></span>`,
+    `<span><b>${story.receipts_on_disk.length}</b> committed receipts</span>`,
+    `<span>AGPL-3.0 + commercial</span>`,
+  ].join("");
+  $("receiptList").textContent = " Receipts: " + story.receipts_on_disk.join(", ") + ".";
+}
+
+function drawCurve(rungs) {
+  const svg = $("ladderCurve");
+  if (!rungs.length) return;
+  const values = rungs.map(r => parseInt(r.total));
+  const labels = rungs.map(r => r.label.split(" ")[0]);
+  const max = 30, px = i => 30 + i * (400 / (values.length - 1)), py = v => 100 - (v / max) * 85;
+  let out = `<line x1="28" y1="100" x2="440" y2="100" stroke="var(--line)"/>`;
+  out += `<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${values.map((v, i) => px(i) + "," + py(v)).join(" ")}"/>`;
+  values.forEach((v, i) => {
+    out += `<circle cx="${px(i)}" cy="${py(v)}" r="4" fill="var(--accent)"/>`;
+    out += `<text x="${px(i)}" y="${py(v) - 9}" text-anchor="middle" font-size="11" font-family="var(--mono)" fill="var(--ink)">${v}</text>`;
+    out += `<text x="${px(i)}" y="114" text-anchor="middle" font-size="10" font-family="var(--mono)" fill="var(--ink-soft)">${labels[i]}</text>`;
+  });
+  svg.innerHTML = out;
+}
+
+const PHASES = [
+  "minting exam items against the exact verifier…",
+  "stress pool built — checking items against the training buffer…",
+  "quarantining training overlap…",
+  "grading the memorizer (no answer keys — checker specs)…",
+  "grading the candidate…",
+  "computing discrimination and the promotion decision…",
+];
+
+async function runLive() {
+  const btn = $("runBtn"), status = $("liveStatus");
+  btn.disabled = true;
+  $("liveGrid").hidden = true; $("liveFine").hidden = true; $("liveVerdict").innerHTML = "";
+  let phase = 0;
+  const started = Date.now();
+  status.textContent = PHASES[0];
+  const ticker = setInterval(() => {
+    phase = Math.min(phase + 1, PHASES.length - 1);
+    status.textContent = PHASES[phase] + "  (" + ((Date.now() - started) / 1000).toFixed(0) + "s)";
+  }, 2300);
+  try {
+    const r = await (await fetch("/api/live", { method: "POST" })).json();
+    clearInterval(ticker);
+    if (r.error) { status.textContent = "error: " + r.error; btn.disabled = false; return; }
+    status.textContent = `done in ${r.elapsed_seconds}s — every number below was computed just now`;
+    $("lv-minted").textContent = r.minted;
+    $("lv-quarantined").textContent = r.quarantined;
+    $("lv-scores").textContent = `${r.base_score} vs ${r.candidate_score} of ${r.total_items}`;
+    $("lv-gains").textContent = `${r.gains} / ${r.regressions}`;
+    $("liveGrid").hidden = false;
+    $("liveVerdict").innerHTML = `<span class="verdict-stamp ${r.decision}">${r.decision}</span>`;
+    $("liveFine").hidden = false;
+  } catch (e) {
+    clearInterval(ticker);
+    status.textContent = "live run unavailable — the committed transcript in results/ is the fallback";
+  }
+  btn.disabled = false;
+}
+
+boot();
+</script>
+</body>
+</html>

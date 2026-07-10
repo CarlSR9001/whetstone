@@ -1,0 +1,148 @@
+{
+  "bank": {
+    "composition": "12 coloring repairs + 12 MIS repairs (checker-spec, no answer keys) + 24 hidden-property-check code tasks",
+    "grading": "production registry: live stress pools, isolated-subprocess checkers",
+    "items": 48
+  },
+  "evidence_scope": "cross-scale ladder on a rented A40 (controlled infra), 2026-07-10",
+  "findings": [
+    "EVERY stock model, 1.5B through 32B including phi-4, scored 0/24 on the graph-repair items: the entire scale curve (8->12->17->18->20->22) lives in the code domain. For untrained models the repair frontier sits above the whole cohort \u2014 the same lesson the examiner taught locally: items must bracket a cohort's frontier to discriminate. The verifier-gated fine-tuned 4B student passes repair items of this family; every stock model here scores zero (different item sets \u2014 direction, not a number-to-number comparison)",
+    "gate selectivity is textbook: the 20x contrast certifies (12 gains, 0 regressions, p=4.9e-4) while adjacent rungs and specialist pairs BLOCK or HOLD \u2014 the gate refuses differences the evidence cannot carry, which is the product property",
+    "adjacent-rung BLOCKs are driven by real regressions: bigger models failing code items smaller ones pass, at temperature 0 \u2014 item-level nonmonotonicity across scale, the same genre as the chess depth pathology",
+    "phi-4 (14B, out-of-family) ties the 32B coder for best code score at half the size: scale is not the only axis, and the bank sees that"
+  ],
+  "gates": [
+    {
+      "baseline": "qwen25_1_5b",
+      "candidate": "qwen25_32b",
+      "comparison": "20x scale contrast",
+      "gains": 12,
+      "p": 0.00048828125,
+      "regressions": 0,
+      "verdict": "PASS"
+    },
+    {
+      "baseline": "qwen25_7b",
+      "candidate": "qwen25_14b",
+      "comparison": "adjacent rungs",
+      "gains": 4,
+      "p": 1.0,
+      "regressions": 3,
+      "verdict": "BLOCK"
+    },
+    {
+      "baseline": "qwen25_14b",
+      "candidate": "qwen25_32b",
+      "comparison": "adjacent rungs",
+      "gains": 4,
+      "p": 0.6875,
+      "regressions": 2,
+      "verdict": "BLOCK"
+    },
+    {
+      "baseline": "qwen25_7b",
+      "candidate": "qwen25_coder_7b",
+      "comparison": "specialization at 7B",
+      "gains": 2,
+      "p": 1.0,
+      "regressions": 1,
+      "verdict": "BLOCK"
+    },
+    {
+      "baseline": "qwen25_32b",
+      "candidate": "qwen25_coder_32b",
+      "comparison": "specialization at 32B",
+      "gains": 2,
+      "p": 0.5,
+      "regressions": 0,
+      "verdict": "HOLD"
+    }
+  ],
+  "ladder": [
+    {
+      "by_domain": {
+        "code": "8/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "1.5B",
+      "system": "qwen25_1_5b",
+      "total": "8/48"
+    },
+    {
+      "by_domain": {
+        "code": "12/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "3B",
+      "system": "qwen25_3b",
+      "total": "12/48"
+    },
+    {
+      "by_domain": {
+        "code": "17/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "7B",
+      "system": "qwen25_7b",
+      "total": "17/48"
+    },
+    {
+      "by_domain": {
+        "code": "18/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "7B coder",
+      "system": "qwen25_coder_7b",
+      "total": "18/48"
+    },
+    {
+      "by_domain": {
+        "code": "18/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "14B (bnb-4bit)",
+      "system": "qwen25_14b",
+      "total": "18/48"
+    },
+    {
+      "by_domain": {
+        "code": "22/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "14B phi-4 (out-of-family)",
+      "system": "phi4_14b",
+      "total": "22/48"
+    },
+    {
+      "by_domain": {
+        "code": "20/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "32B (bnb-4bit)",
+      "system": "qwen25_32b",
+      "total": "20/48"
+    },
+    {
+      "by_domain": {
+        "code": "22/24",
+        "coloring": "0/12",
+        "mis": "0/12"
+      },
+      "label": "32B coder (bnb-4bit)",
+      "system": "qwen25_coder_32b",
+      "total": "22/48"
+    }
+  ],
+  "notes": [
+    "FastContext-1.0-4B (the local student's base) failed to load on the pod via its bespoke cache path \u2014 a tooling gap, recorded honestly; Qwen 3B/7B bracket its size",
+    "grades ran on operator-controlled rented hardware; no burn per the exposure policy, and the run manifests record the venue"
+  ],
+  "sanitization": "totals and domains only; no item ids, prompts, or answers"
+}

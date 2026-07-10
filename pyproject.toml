@@ -8,7 +8,8 @@ license = "AGPL-3.0-or-later"
 authors = [{ name = "Justin Garringer" }]
 keywords = ["evaluation", "llm", "promotion-gate", "continual-learning", "contamination"]
 classifiers = [
-  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  # License is declared as an SPDX expression above (PEP 639); a license
+  # classifier alongside it is rejected by modern setuptools.
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]

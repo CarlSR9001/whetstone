@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Whetstone — live demo stage</title>
+<link rel="icon" href="data:,">
+<title>Whetstone — PUBLIC EVIDENCE DEMO</title>
 <style>
   :root {
     --paper:#F2F4F3; --ink:#1B2228; --ink-soft:#4A555C; --line:#C9D1CE;
@@ -27,6 +28,10 @@
     align-items:baseline; gap:26px; flex-wrap:wrap; }
   .wordmark { font-family:var(--display); font-weight:700; font-size:22px; letter-spacing:.04em; }
   .wordmark span { color:var(--accent); }
+  .edition { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.08em;
+    color:var(--paper); background:var(--accent); padding:4px 9px; white-space:nowrap; }
+  .receipt-health { margin:14px 0 0; padding:10px 13px; border:2px solid var(--hold);
+    background:var(--card); color:var(--ink); font-family:var(--mono); font-size:12px; }
   nav { display:flex; gap:18px; font-family:var(--mono); font-size:12.5px; }
   nav a { color:var(--ink-soft); text-decoration:none; }
   nav a:hover, nav a:focus { color:var(--accent); outline:none; }
@@ -128,6 +133,7 @@
 
 <header class="top">
   <div class="wordmark">WHETSTONE<span>.</span></div>
+  <div class="edition" id="editionBadge">PUBLIC EVIDENCE DEMO · PORT 8990</div>
   <nav>
     <a href="#problem">1 · the problem</a>
     <a href="#live">2 · watch it run</a>
@@ -136,6 +142,7 @@
     <a href="#numbers">5 · the numbers</a>
   </nav>
 </header>
+<div class="receipt-health" id="receiptHealth" hidden></div>
 
 <section id="problem">
   <div class="kicker">The problem</div>
@@ -282,6 +289,14 @@ function domainTable(el, byDomain) {
     `<tr><td>${domain === "coloring" || domain === "mis" ? domain + " (graph repair)" : domain}</td><td>${score}</td></tr>`).join("");
 }
 
+function unavailableCard(cardId, messageId) {
+  const card = $(cardId), badge = card.querySelector(".badge");
+  card.classList.remove("blocked", "passed");
+  badge.className = "badge BASE";
+  badge.textContent = "UNAVAILABLE";
+  if (messageId) $(messageId).textContent = "receipt unavailable — this exhibit is not being claimed";
+}
+
 let STORY = null;
 
 async function boot() {
@@ -299,71 +314,94 @@ async function boot() {
     return;
   }
   STORY = story;
+  const edition = (story.stage && story.stage.edition) || "UNKNOWN STAGE EDITION";
+  $("editionBadge").textContent = `${edition} · PORT ${(story.stage && story.stage.default_port) || "?"}`;
+  const health = story.receipt_health || {};
+  if (!health.complete) {
+    const unavailable = health.unavailable || [];
+    $("receiptHealth").textContent =
+      `PARTIAL EVIDENCE — ${unavailable.length} receipt(s) unavailable` +
+      (unavailable.length ? `: ${unavailable.join(", ")}.` : ".") +
+      " Other independent exhibits remain live.";
+    $("receiptHealth").hidden = false;
+  }
   const d = story.decision;
 
   $("d-base-total").textContent = d.base.total || "–";
+  if (!d.base.total) unavailableCard("card-base");
   domainTable($("d-base-domains"), d.base.by_domain);
   $("d-gen2-total").textContent = d.gen2.total || "–";
   domainTable($("d-gen2-domains"), d.gen2.by_domain);
   $("d-gen2-reason").textContent =
     `${d.gen2.gains} gains — but ${d.gen2.regressions} code regressions, stable across repeated grading`;
+  if (!d.gen2.total) unavailableCard("card-gen2", "d-gen2-reason");
   $("d-gen3-total").textContent = d.gen3.total || "–";
   domainTable($("d-gen3-domains"), d.gen3.by_domain);
   $("d-gen3-evidence").textContent =
     `${d.gen3.gains} gains, ${d.gen3.regressions} regressions — ${fmtP(d.gen3.p)}`;
+  if (!d.gen3.total) unavailableCard("card-gen3", "d-gen3-evidence");
   const reps = d.gen3.repeats || {};
   $("d-gen3-repro").textContent = reps.runs
     ? `${reps.runs} fresh model loads → ${(reps.scores || []).join(", ")} — ${reps.unique_item_outcome_vectors} identical item-level outcome vector`
     : "";
   $("mechanismText").textContent = d.gen3.mechanism ? "— " + d.gen3.mechanism : "";
-  $("vs32bText").textContent =
-    `Head-to-head against a stock 32B model (${d.vs_32b.qwen_total} on the same exam), gen-3 wins with ` +
-    `${d.vs_32b.gains} gains — and the strict gate still says ${d.vs_32b.verdict}, because there is ` +
-    `${d.vs_32b.regressions} regression. Winning the aggregate never excuses breaking something that worked.`;
+  $("vs32bText").textContent = d.vs_32b.qwen_total
+    ? `Head-to-head against a stock 32B model (${d.vs_32b.qwen_total} on the same exam), gen-3 wins with ` +
+      `${d.vs_32b.gains} gains — and the strict gate still says ${d.vs_32b.verdict}, because there is ` +
+      `${d.vs_32b.regressions} regression. Winning the aggregate never excuses breaking something that worked.`
+    : "receipt unavailable — this comparison is not being claimed";
 
   // ladder card
   const rungs = story.ladder.rungs.filter(r => !r.label.includes("out-of-family") && !r.label.includes("coder"));
   $("w-ladder-head").textContent = rungs.length
     ? `${rungs[0].total.split("/")[0]} → ${rungs[rungs.length - 1].total.split("/")[0]} of 48` : "–";
   drawCurve(rungs);
-  $("w-ladder-note").textContent =
+  $("w-ladder-note").textContent = rungs.length ?
     "Qwen2.5 1.5B through 32B, graded on one private bank on a rented A40. Every stock model scored " +
     "0 on the graph-repair items — the domain our verifier-trained 4B passes. Adjacent sizes correctly " +
-    "HOLD or BLOCK; only the 20× contrast certifies.";
+    "HOLD or BLOCK; only the 20× contrast certifies." :
+    "receipt unavailable — the model-ladder exhibit is not being claimed";
   $("w-ladder-json").textContent = JSON.stringify(story.ladder, null, 1);
 
   // attack card
   const a = story.attack;
-  $("w-attack-head").textContent = "0 evasions · 0 over-quarantines";
-  $("w-attack-note").textContent =
+  $("w-attack-head").textContent = a.rows != null ? "0 evasions · 0 over-quarantines" : "receipt unavailable";
+  $("w-attack-note").textContent = a.rows != null ?
     `${a.rows} adversarial rewrites generated by a 32B model; ${a.equivalent} were genuinely equivalent ` +
     `and every one was caught; ${a.distinct} were genuinely different and none were wrongly quarantined ` +
-    `(95% upper bound ${a.upper_bound != null ? (a.upper_bound * 100).toFixed(2) + "%" : "n/a"}).`;
+    `(95% upper bound ${a.upper_bound != null ? (a.upper_bound * 100).toFixed(2) + "%" : "n/a"}).` :
+    "The adversarial-attack exhibit is not being claimed without its receipt.";
   $("w-attack-json").textContent = JSON.stringify(a, null, 1);
 
   // leak card
   const inc = story.incident;
   const burned = (inc.audits || []).reduce((sum, audit) => sum + (audit.burned_total_across_passes || audit.burned || 0), 0);
-  $("w-leak-head").textContent = `${burned} exam items burned`;
-  $("w-leak-note").textContent =
+  const haveIncident = Boolean(inc.what || (inc.audits || []).length);
+  $("w-leak-head").textContent = haveIncident ? `${burned} exam items burned` : "receipt unavailable";
+  $("w-leak-note").textContent = haveIncident ?
     "Our own exposure audit found engine transcripts in our public repository — our leak, found by our " +
     "tooling. Every derivable item was permanently burned, mills were randomized so trajectories can't " +
-    "be replayed, and exposure checking now runs at mint time. The bank replenished within the hour.";
+    "be replayed, and exposure checking now runs at mint time. The bank replenished within the hour." :
+    "The exposure-incident exhibit is not being claimed without its receipt.";
   $("w-leak-json").textContent = JSON.stringify(inc, null, 1);
 
   // engine card
   const b = story.bakeoff;
-  $("w-engine-head").textContent =
-    `${(b.candidate.total || "?")} vs ${(b.baseline.total || "?")} — still ${b.gate_strict.verdict || "?"}`;
-  $("w-engine-note").textContent =
+  const haveBakeoff = Boolean(b.candidate.total && b.baseline.total && b.gate_strict.verdict);
+  $("w-engine-head").textContent = haveBakeoff
+    ? `${b.candidate.total} vs ${b.baseline.total} — still ${b.gate_strict.verdict}` : "receipt unavailable";
+  $("w-engine-note").textContent = haveBakeoff ?
     "A deeper chess+Go engine stack beat a shallow one decisively — and the gate still blocked promotion: " +
     "one chess position regressed with a measured flip rate of exactly zero across repeated grading. " +
-    "A real, reproducible regression inside a better system is exactly what this exists to catch.";
+    "A real, reproducible regression inside a better system is exactly what this exists to catch." :
+    "The engine-bakeoff exhibit is not being claimed without its receipt.";
   $("w-engine-json").textContent = JSON.stringify(b, null, 1);
 
   // numbers strip
   $("numbersRow").innerHTML = [
-    `<span>private bank <b>${d.bank_items} items</b> · sha-256 <b>${d.bank_sha256}…</b></span>`,
+    d.bank_items != null
+      ? `<span>private bank <b>${d.bank_items} items</b> · sha-256 <b>${d.bank_sha256}…</b></span>`
+      : `<span>private-bank receipt <b>unavailable</b></span>`,
     `<span><b>214 tests</b> · GitHub CI green</span>`,
     `<span>graded on <b>${d.hardware.split(",")[0]}</b></span>`,
     `<span><b>${story.receipts_on_disk.length}</b> committed receipts</span>`,

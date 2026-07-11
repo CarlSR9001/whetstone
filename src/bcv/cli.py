@@ -509,7 +509,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_mcp.set_defaults(fn=cmd_mcp)
 
     p_stage = sub.add_parser("stage", help="serve the demo stage (receipts + live run, localhost)")
-    p_stage.add_argument("--port", type=int, default=8990)
+    p_stage.add_argument("--port", type=int, help="localhost port (default: 8990)")
     p_stage.set_defaults(fn=cmd_stage)
 
     p_sweep = sub.add_parser("sweep", help="retire saturated items into the downward flow")

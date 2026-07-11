@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 
 from bcv import demo_stage
 
@@ -22,6 +23,29 @@ def test_story_compiles_from_committed_receipts():
     assert story["incident"]["audits"]
     assert story["bakeoff"]["gate_strict"]["verdict"] == "BLOCK"
     assert len(story["receipts_on_disk"]) >= 5
+    assert story["receipt_health"]["complete"] is True
+    assert story["stage"] == {"edition": "PUBLIC EVIDENCE DEMO", "default_port": 8990}
+
+
+def test_story_paths_are_independent_of_launch_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    story = demo_stage.compile_story()
+    assert story["decision"]["base"]["total"] == "22/48"
+    assert demo_stage.RESULTS.is_absolute()
+    assert demo_stage.PAGE.is_absolute()
+
+
+def test_malformed_receipt_does_not_blank_other_exhibits(tmp_path):
+    shutil.copy2(
+        demo_stage.RESULTS / "local_fastcontext_same_bank_receipt.json",
+        tmp_path / "local_fastcontext_same_bank_receipt.json",
+    )
+    (tmp_path / "local_fastcontext_gen3_routed_receipt.json").write_text("{broken", encoding="utf-8")
+    story = demo_stage.compile_story(tmp_path)
+    assert story["decision"]["base"]["total"] == "22/48"
+    assert story["decision"]["gen3"]["total"] is None
+    assert "local_fastcontext_gen3_routed_receipt.json" in story["receipt_health"]["invalid"]
+    assert str(tmp_path) not in json.dumps(story)
 
 
 def test_story_never_leaks_item_content_or_local_paths():
@@ -32,6 +56,13 @@ def test_story_never_leaks_item_content_or_local_paths():
     assert '"moves"' not in blob
     assert "repair_expression" not in blob
     assert "Users" not in blob and "AI Arch" not in blob
+
+
+def test_public_page_is_unmistakable_and_exposes_partial_health():
+    page = demo_stage.PAGE.read_text(encoding="utf-8")
+    assert "PUBLIC EVIDENCE DEMO · PORT 8990" in page
+    assert "PARTIAL EVIDENCE" in page
+    assert "Act five — the numbers behind this page" in page
 
 
 def test_story_carries_live_reference_fallback():

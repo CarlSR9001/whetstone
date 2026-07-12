@@ -1,0 +1,76 @@
+name: Whetstone Inspector
+description: Quarantine declared eval exposure and enforce a paired PASS/HOLD/BLOCK promotion decision.
+inputs:
+  exam:
+    description: Exam JSON or JSONL path.
+    required: true
+  exposure:
+    description: Declared training/exposure JSON or JSONL path.
+    required: true
+  baseline:
+    description: Baseline item outcomes JSON or JSONL path.
+    required: true
+  candidate:
+    description: Candidate item outcomes JSON or JSONL path.
+    required: true
+  receipt:
+    description: Output JSON receipt path.
+    required: false
+    default: whetstone-promotion-receipt.json
+  alpha:
+    description: Paired exact-test alpha.
+    required: false
+    default: "0.05"
+  min-gains:
+    description: Minimum item-level gains.
+    required: false
+    default: "1"
+  max-regressions:
+    description: Maximum item-level regressions.
+    required: false
+    default: "0"
+outputs:
+  verdict:
+    description: PASS, HOLD, or BLOCK.
+    value: ${{ steps.inspect.outputs.verdict }}
+  receipt:
+    description: Receipt path.
+    value: ${{ inputs.receipt }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - id: inspect
+      shell: bash
+      run: |
+        set +e
+        python -m bcv.cli inspect \
+          --exam "${{ inputs.exam }}" \
+          --exposure "${{ inputs.exposure }}" \
+          --baseline "${{ inputs.baseline }}" \
+          --candidate "${{ inputs.candidate }}" \
+          --alpha "${{ inputs.alpha }}" \
+          --min-gains "${{ inputs['min-gains'] }}" \
+          --max-regressions "${{ inputs['max-regressions'] }}" \
+          --out "${{ inputs.receipt }}"
+        code=$?
+        echo "$code" > .whetstone-exit-code
+        if [[ -f "${{ inputs.receipt }}" ]]; then
+          python -c 'import json,os; r=json.load(open(os.environ["RECEIPT"], encoding="utf-8")); print("verdict="+r["gate"]["verdict"])' >> "$GITHUB_OUTPUT"
+        else
+          echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
+        fi
+        exit 0
+      env:
+        PYTHONPATH: ${{ github.action_path }}/../../../src
+        RECEIPT: ${{ inputs.receipt }}
+    - if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: whetstone-promotion-receipt
+        path: ${{ inputs.receipt }}
+        if-no-files-found: error
+    - shell: bash
+      run: exit "$(cat .whetstone-exit-code)"

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Stateless public tools built from Whetstone's verifier-grounded evaluation machinery.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css?v=0.1.0.2">
+  <title>Whetstone Tools — verifier-grounded evaluation utilities</title>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Whetstone Tools home">WHETSTONE<span>.</span></a>
+    <nav aria-label="Primary navigation">
+      <a href="#tools">Tools</a>
+      <a href="#evidence">Evidence</a>
+      <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">Core source</a>
+    </nav>
+    <span class="live-chip"><i></i> stateless public instance</span>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">Evaluation infrastructure you can touch</p>
+      <h1>Eight small products.<br>One verifier core.</h1>
+      <p class="hero-copy">Audit declared eval exposure, compare model versions item by item, diagnose a bank, constrain a Markdown patch, hunt graph counterexamples, inspect memory relevance, and replay agent events—without loading Whetstone's private examiner bank.</p>
+      <div class="trust-row" aria-label="Service boundaries">
+        <span>No accounts</span><span>No cookies</span><span>No upload persistence</span><span>No private bank on server</span>
+      </div>
+      <div class="warning">
+        <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. A real private exam belongs in the local CLI or a deployment you control.
+      </div>
+    </section>
+
+    <section class="evidence" id="evidence" aria-labelledby="evidence-heading">
+      <div>
+        <p class="eyebrow">Receipts, not slogans</p>
+        <h2 id="evidence-heading">The mechanisms were measured before they were wrapped.</h2>
+      </div>
+      <div class="evidence-grid" id="evidenceGrid" aria-live="polite">
+        <div class="metric"><b>—</b><span>loading receipt evidence</span></div>
+      </div>
+    </section>
+
+    <section class="tools" id="tools" aria-labelledby="tools-heading">
+      <p class="eyebrow">Choose a surface</p>
+      <h2 id="tools-heading">Run a real mechanism on your own disposable data.</h2>
+      <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Whetstone tools"></div>
+
+      <div class="workbench">
+        <section class="input-pane" aria-labelledby="activeTitle">
+          <div class="pane-heading">
+            <div>
+              <p class="tool-number" id="toolNumber">01</p>
+              <h3 id="activeTitle">Whetstone Inspector</h3>
+            </div>
+            <span class="boundary-badge" id="boundaryBadge">exact inputs</span>
+          </div>
+          <p class="tool-promise" id="activePromise"></p>
+          <p class="tool-boundary" id="activeBoundary"></p>
+
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload JSON or JSONL files">
+            <input id="fileInput" type="file" multiple hidden>
+            <strong>Drop files here</strong>
+            <span id="dropHint">or click to choose JSON / JSONL</span>
+          </div>
+          <div class="file-chips" id="fileChips" aria-live="polite"></div>
+
+          <label class="editor-label" for="payloadEditor">
+            Request payload
+            <span>JSON; editable before anything is sent</span>
+          </label>
+          <textarea id="payloadEditor" spellcheck="false" aria-describedby="editorHelp"></textarea>
+          <p class="editor-help" id="editorHelp">Load the verified sample, replace it with sanitized data, then run.</p>
+
+          <div class="actions">
+            <button class="button secondary" id="sampleButton" type="button">Restore sample</button>
+            <button class="button primary" id="runButton" type="button">Run tool</button>
+          </div>
+        </section>
+
+        <section class="result-pane" aria-labelledby="resultHeading">
+          <div class="result-topline">
+            <div>
+              <p class="tool-number">RECEIPT</p>
+              <h3 id="resultHeading">Waiting for a run</h3>
+            </div>
+            <span class="status idle" id="resultStatus">IDLE</span>
+          </div>
+          <div class="result-empty" id="resultEmpty">
+            <div class="empty-mark">◇</div>
+            <p>The result will stay here while you inspect the item-level evidence and download the JSON receipt.</p>
+          </div>
+          <div id="resultContent" hidden>
+            <div class="summary-grid" id="summaryGrid"></div>
+            <div class="detail" id="resultDetail"></div>
+            <details class="json-details">
+              <summary>Complete JSON receipt</summary>
+              <pre id="resultJson"></pre>
+            </details>
+            <div class="actions result-actions">
+              <button class="button secondary" id="copyButton" type="button">Copy JSON</button>
+              <button class="button secondary" id="downloadButton" type="button">Download receipt</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="local-callout">
+      <div>
+        <p class="eyebrow">The serious deployment</p>
+        <h2>Keep the exam where the model cannot see it.</h2>
+        <p>The hosted tools are stateless demonstrations. Whetstone's CLI, MCP server, ACP candidate adapter, and localhost service keep private items inside your trust boundary and emit the same audit-shaped decisions.</p>
+      </div>
+      <pre><code>whetstone gate --baseline v1 --candidate v2
+# exit 0 PASS · 2 HOLD · 3 BLOCK</code></pre>
+    </section>
+  </main>
+
+  <footer>
+    <span>Whetstone Tools <b id="serviceVersion">v—</b></span>
+    <span>AGPL-3.0 · commercial licensing available</span>
+    <span id="serviceState">checking service boundary…</span>
+  </footer>
+
+  <script src="/app.js?v=0.1.0.2" defer></script>
+</body>
+</html>

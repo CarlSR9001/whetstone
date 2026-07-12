@@ -7,3 +7,5 @@ tools/
 results/private/
 *.sqlite3
 gtp_logs/
+output/
+.playwright-cli/

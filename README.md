@@ -53,6 +53,8 @@ python -m bcv.cli sweep                                  # retire saturated item
 python -m bcv.cli redteam                                # hostile self-test; nonzero exit on escape
 python -m bcv.cli serve --port 8977                      # localhost JSON service
 python -m bcv.cli mcp                                    # MCP server (also in .mcp.json)
+python -m bcv.cli inspect --exam exam.jsonl --exposure exposure.jsonl --baseline v1.json --candidate v2.json
+python -m bcv.cli toolbox --port 8988                    # eight stateless tools on localhost
 ```
 
 Grading an external endpoint burns every exposed item — permanently — via the
@@ -60,6 +62,14 @@ bank's exposure accounting; the promotion report carries paired evidence, an
 exact McNemar p-value, the bank's own resolution statement, and a SHA-256
 commitment to bank state. No surface, human or agent, ever serves exam item
 contents.
+
+The stateless toolbox turns eight mechanisms already in the repo into usable
+file-in/receipt-out surfaces: Whetstone Inspector, Eval Leak Auditor, Promotion
+Gate, Bank Health, SafePatch, Counterexample Hunter, Memory Relevance Debugger,
+and Agent Replay Console. The public instance at
+[whetstone.cyberelf.link](https://whetstone.cyberelf.link/) accepts only caller
+supplied disposable data; it has no examiner bank, accounts, cookies, or upload
+persistence. Private exams belong in the CLI or a customer-controlled instance.
 
 Support-panel minting currently fails closed by default: the lexical checker
 passed its clean smoke corpus but failed 13/13 adversarial cases, so it cannot

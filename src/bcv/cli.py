@@ -11,6 +11,8 @@
     whetstone panel-adjudicate          require two-reviewer consensus for labels
     whetstone local-bakeoff             run a fresh localhost-only paired code experiment
     whetstone serve --port 8977         the examiner as a local JSON service
+    whetstone inspect --exam ...        stateless files-in promotion receipt
+    whetstone toolbox --port 8988       public stateless product suite
 
 Exit codes are the CI contract: PASS=0, HOLD=2, BLOCK=3, usage/config errors=1.
 A pipeline step `whetstone gate ...` therefore fails the build unless the
@@ -384,6 +386,54 @@ def cmd_stage(args, config: dict) -> int:
     return 0
 
 
+def cmd_inspect(args, config: dict) -> int:
+    """Run the hosted Inspector contract locally, with no private-bank mutation."""
+    from bcv.product_tools import inspect_promotion
+
+    policy_config = config.get("policy", {})
+    payload = {
+        "exam": Path(args.exam).read_text(encoding="utf-8-sig"),
+        "exposure": Path(args.exposure).read_text(encoding="utf-8-sig"),
+        "baseline": Path(args.baseline).read_text(encoding="utf-8-sig"),
+        "candidate": Path(args.candidate).read_text(encoding="utf-8-sig"),
+        "baseline_name": args.baseline_name,
+        "candidate_name": args.candidate_name,
+        "policy": {
+            "min_gains": args.min_gains if args.min_gains is not None else int(policy_config.get("min_gains", 1)),
+            "max_regressions": args.max_regressions if args.max_regressions is not None else int(policy_config.get("max_regressions", 0)),
+            "confidence_alpha": args.alpha if args.alpha is not None else float(policy_config.get("confidence_alpha", 0.05)),
+            "require_retained_probe": False,
+        },
+    }
+    report = inspect_promotion(payload)
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if args.clean_exam_out:
+        rows = report["audit"]["clean_exam"]
+        Path(args.clean_exam_out).write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"
+        )
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        evidence = report["gate"]["paired_evidence"]
+        print(f"QUARANTINED: {report['audit']['quarantined_items']}")
+        print(f"CLEAN_COHORT: {report['audit']['clean_items']}")
+        print(f"GAINS: {evidence.get('gains', 0)}")
+        print(f"REGRESSIONS: {evidence.get('regressions', 0)}")
+        print(f"DECISION: {report['gate']['verdict']}")
+        if args.out:
+            print(f"RECEIPT: {args.out}")
+    return EXIT_BY_VERDICT[report["gate"]["verdict"]]
+
+
+def cmd_toolbox(args, config: dict) -> int:
+    from bcv.toolbox_service import serve
+
+    serve(args.host, args.port)
+    return 0
+
+
 def cmd_mcp(args, config: dict) -> int:
     import bcv.whetstone_mcp as whetstone_mcp
 
@@ -511,6 +561,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_stage = sub.add_parser("stage", help="serve the demo stage (receipts + live run, localhost)")
     p_stage.add_argument("--port", type=int, help="localhost port (default: 8990)")
     p_stage.set_defaults(fn=cmd_stage)
+
+    p_inspect = sub.add_parser("inspect", help="quarantine exposure and gate caller-supplied result files")
+    p_inspect.add_argument("--exam", required=True, help="exam JSON/JSONL with item_id and optional domain")
+    p_inspect.add_argument("--exposure", required=True, help="declared training/exposure JSON/JSONL")
+    p_inspect.add_argument("--baseline", required=True, help="baseline item outcomes JSON/JSONL")
+    p_inspect.add_argument("--candidate", required=True, help="candidate item outcomes JSON/JSONL")
+    p_inspect.add_argument("--baseline-name", default="baseline")
+    p_inspect.add_argument("--candidate-name", default="candidate")
+    p_inspect.add_argument("--alpha", type=float)
+    p_inspect.add_argument("--min-gains", type=int)
+    p_inspect.add_argument("--max-regressions", type=int)
+    p_inspect.add_argument("--out", help="write the complete JSON receipt")
+    p_inspect.add_argument("--clean-exam-out", help="write post-quarantine exam JSONL")
+    p_inspect.add_argument("--json", action="store_true", help="print the complete receipt")
+    p_inspect.set_defaults(fn=cmd_inspect)
+
+    p_toolbox = sub.add_parser("toolbox", help="serve the stateless public product suite")
+    p_toolbox.add_argument("--host", default="127.0.0.1")
+    p_toolbox.add_argument("--port", type=int, default=8988)
+    p_toolbox.set_defaults(fn=cmd_toolbox)
 
     p_sweep = sub.add_parser("sweep", help="retire saturated items into the downward flow")
     p_sweep.add_argument("--min-systems", type=int, default=2)

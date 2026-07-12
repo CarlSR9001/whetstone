@@ -1,0 +1,48 @@
+[Unit]
+Description=Whetstone stateless public tools
+Documentation=https://whetstone.cyberelf.link/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=shankatsu
+Group=shankatsu
+WorkingDirectory=/opt/whetstone-tools/current
+Environment=PYTHONPATH=/opt/whetstone-tools/current/src
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m bcv.toolbox_service --host 127.0.0.1 --port 8988
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+KillSignal=SIGINT
+UMask=0077
+
+# The public process is read-only, unprivileged, loopback-bound, and does not
+# load an examiner bank. These restrictions turn those application boundaries
+# into operating-system boundaries as well.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=768M
+TasksMax=96
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

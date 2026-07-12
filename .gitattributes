@@ -1,0 +1,4 @@
+# These files run on Linux after being archived from a Windows checkout.
+*.sh text eol=lf
+deploy/* text eol=lf
+.github/actions/**/*.yml text eol=lf

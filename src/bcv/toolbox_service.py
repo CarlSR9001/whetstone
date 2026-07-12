@@ -34,7 +34,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -165,23 +165,48 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         if path == "/llms.txt":
             body = (
                 "# Whetstone Tools\n\n"
-                "Stateless public demonstrations of exposure auditing, paired promotion gates, bank health, "
-                "SafePatch conservation checks, bounded graph counterexample search, memory relevance scoring, "
-                "and agent event replay. No private examiner bank is loaded.\n\n"
-                "## MCP\n\n"
-                "Remote MCP endpoint (Streamable HTTP, stateless): POST JSON-RPC to /mcp. Tier 0 tools are "
-                "the stateless analyses above. Tier 1: report_card_start hands your agent a disposable "
-                "graph-repair exam; report_card_submit grades it by checker spec and destroys the session.\n"
+                "> Verifier-grounded evaluation tools for AI systems, callable by agents over MCP or REST. "
+                "Stateless, no auth, nothing stored, no private exam bank loaded.\n\n"
+                "Whetstone decides whether a new agent/model version genuinely improved: exposure quarantine, "
+                "paired promotion gates (PASS/HOLD/BLOCK with an exact McNemar test), leakage audits, bank "
+                "health, SafePatch conservation edits, graph counterexample search, memory relevance scoring, "
+                "and agent event replay.\n\n"
+                "## Use it\n\n"
+                "- MCP endpoint (Streamable HTTP, stateless JSON-RPC): POST https://whetstone.cyberelf.link/mcp\n"
+                "- Claude Code: claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp\n"
+                "- REST: every tool is POST /api/<name>; GET /api/examples returns a complete valid payload per tool\n"
+                "- Skill file (Anthropic Skills format, full instructions): https://whetstone.cyberelf.link/skill.md\n"
+                "- Agent documentation page: https://whetstone.cyberelf.link/for-agents\n"
+                "- Tool catalog: https://whetstone.cyberelf.link/api/catalog\n"
+                "- Source (AGPL-3.0): https://github.com/CarlSR9001/whetstone\n\n"
+                "## Tiers\n\n"
+                "- Tier 0 (stateless): you supply exam rows, paired results, documents, or event logs; you get "
+                "audits, verdicts, patches, or counterexamples with SHA-256 receipts. Tools: inspect_promotion, "
+                "audit_leakage, promotion_gate, bank_health, safe_patch, counterexample_hunt, memory_relevance, "
+                "replay_trace.\n"
+                "- Tier 1 (report card): report_card_start hands your agent a disposable 6-item graph-repair "
+                "exam; report_card_submit grades it by checker spec (any verified strict refinement passes; no "
+                "answer key exists), reports support-retention diagnostics, and destroys the one-shot session. "
+                "Items are minted from the public frontier: a demonstration, not a credential.\n\n"
+                "## Limits\n\n"
+                "~60 req/min general; 4 report-card sessions + 8 submits per hour per address; counterexample "
+                "hunts 4 per 10 min behind one worker; report card warms ~2 min after restart (GET /api/health "
+                "-> report_card.ready).\n"
             ).encode("utf-8")
             return self._bytes(200, body, "text/plain; charset=utf-8", cache="public, max-age=3600")
         static_name = "index.html" if path in {"/", "/index.html"} else path.lstrip("/")
-        if static_name not in {"index.html", "app.js", "styles.css"}:
+        if static_name == "for-agents":
+            static_name = "for-agents.html"
+        if static_name not in {"index.html", "app.js", "styles.css", "skill.md", "for-agents.html"}:
             return self._json(404, {"error": "not found"})
         file_path = STATIC_ROOT / static_name
         if not file_path.exists():
             return self._json(500, {"error": "static asset unavailable"})
-        mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
-        cache = "public, max-age=300" if static_name != "index.html" else "no-store"
+        if static_name.endswith(".md"):
+            mime = "text/markdown"
+        else:
+            mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+        cache = "no-store" if static_name == "index.html" else "public, max-age=300"
         return self._bytes(200, file_path.read_bytes(), f"{mime}; charset=utf-8", cache=cache)
 
     def do_POST(self) -> None:

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="How AI agents connect to and use the Whetstone verifier toolbox: MCP endpoint, REST API, and the disposable report card.">
+  <meta name="theme-color" content="#10191f">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css?v=0.2.2">
+  <title>Whetstone Tools &mdash; for agents</title>
+  <style>
+    .docs { max-width: 980px; margin: 0 auto; padding: 48px 24px 80px; }
+    .docs h2 { font-size: clamp(26px, 3vw, 38px); margin: 52px 0 14px; }
+    .docs h3 { font-size: 20px; margin: 30px 0 10px; }
+    .docs p, .docs li { color: var(--muted); font-size: 16px; line-height: 1.65; }
+    .docs li { margin: 6px 0; }
+    .docs pre { margin: 14px 0; padding: 15px 17px; overflow: auto; background: var(--ink); color: #dce7e5; font: 12px/1.6 var(--mono); }
+    .docs code { font-family: var(--mono); font-size: .92em; }
+    .docs p code, .docs li code, .docs td code { background: rgba(127,127,127,.14); padding: 1px 5px; }
+    .docs table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    .docs th, .docs td { text-align: left; padding: 9px 10px; border-bottom: 1px solid rgba(127,127,127,.25); vertical-align: top; }
+    .docs th { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .docs .warning { margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Whetstone Tools home">WHETSTONE<span>.</span></a>
+    <nav aria-label="Primary navigation">
+      <a href="/#tools">Workbench</a>
+      <a href="/skill.md">skill.md</a>
+      <a href="/llms.txt">llms.txt</a>
+      <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">Core source</a>
+    </nav>
+    <span class="live-chip"><i></i> live &middot; stateless &middot; private bank absent</span>
+  </header>
+
+  <main class="docs">
+    <p class="eyebrow">Machine-facing documentation</p>
+    <h1>This service is built to be used by agents.</h1>
+    <p>Everything on the human workbench is callable programmatically: eight stateless verifier
+    tools over MCP or REST, plus a disposable report card where the exam grades <em>you</em>.
+    No account, no key, no cookies, nothing stored.</p>
+
+    <h2 id="connect">Connect</h2>
+    <h3>MCP &mdash; preferred</h3>
+    <p>Stateless Streamable HTTP. One JSON-RPC 2.0 message per <code>POST</code>; responses are
+    single JSON bodies (no SSE stream, no session header, no batching).</p>
+    <pre><code># endpoint
+POST https://whetstone.cyberelf.link/mcp
+
+# Claude Code
+claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp
+
+# claude.ai
+Settings &rarr; Connectors &rarr; Add custom connector &rarr; https://whetstone.cyberelf.link/mcp
+
+# raw handshake
+curl -s https://whetstone.cyberelf.link/mcp -H 'Content-Type: application/json' -d '{
+  "jsonrpc":"2.0","id":1,"method":"initialize",
+  "params":{"protocolVersion":"2025-06-18","capabilities":{},
+            "clientInfo":{"name":"you","version":"0"}}}'</code></pre>
+    <h3>REST &mdash; equivalent</h3>
+    <p>Every Tier 0 tool is also <code>POST /api/&lt;name&gt;</code> with the same JSON body.
+    Before composing a request, fetch <code>GET /api/examples</code> &mdash; it returns one
+    complete, valid payload per tool. <code>GET /api/catalog</code> lists endpoints;
+    <code>GET /api/health</code> reports version and report-card readiness.</p>
+
+    <h3>Install as a skill</h3>
+    <p>An Anthropic-format skill file documenting all of this lives at
+    <a href="/skill.md"><code>/skill.md</code></a>. Save it into your skills directory
+    (e.g. <code>.claude/skills/whetstone-tools/SKILL.md</code>) and your agent knows the
+    whole surface. <a href="/llms.txt"><code>/llms.txt</code></a> is the condensed index.</p>
+
+    <h2 id="tools">Tier 0 &mdash; stateless verifier tools</h2>
+    <p>You bring the data; the service returns a deterministic receipt with SHA-256 hashes.
+    Use disposable or sanitized inputs &mdash; this is a public demo surface.</p>
+    <table>
+      <thead><tr><th>MCP tool</th><th>REST</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td><code>inspect_promotion</code></td><td><code>/api/inspect</code></td><td>Quarantine declared exposure, pair baseline vs candidate on the clean remainder, issue a promotion receipt.</td></tr>
+        <tr><td><code>audit_leakage</code></td><td><code>/api/leakage</code></td><td>Exact exposure audit: row identity, behavioral fingerprints for graph-DSL rows, similarity flags, clean-exam export.</td></tr>
+        <tr><td><code>promotion_gate</code></td><td><code>/api/gate</code></td><td>PASS / HOLD / BLOCK from paired item results: gains, regressions, exact McNemar p-value, per-domain breakdown.</td></tr>
+        <tr><td><code>bank_health</code></td><td><code>/api/health-report</code></td><td>Item lifecycle: discriminators, saturated items, flaky items, frontier gaps.</td></tr>
+        <tr><td><code>safe_patch</code></td><td><code>/api/safepatch</code></td><td>Section-scoped Markdown patch under conservation checks; untouched sections stay byte-identical.</td></tr>
+        <tr><td><code>counterexample_hunt</code></td><td><code>/api/counterexample</code></td><td>Bounded annealing search for a graph counterexample in a DSL predicate class; exact certificate when found.</td></tr>
+        <tr><td><code>memory_relevance</code></td><td><code>/api/memory</code></td><td>Query-free salience vs objective-conditioned relevance for memories under a token budget.</td></tr>
+        <tr><td><code>replay_trace</code></td><td><code>/api/replay</code></td><td>Reasoning-emulator events &rarr; checkpoints, rewinds, notes, timeline.</td></tr>
+        <tr><td><code>about_whetstone</code></td><td><code>/api/catalog</code></td><td>Orientation: catalog, tiers, links.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="report-card">Tier 1 &mdash; the report card (the exam grades you)</h2>
+    <p>Live demonstration of the promotion-gate mechanism. Items are minted from the
+    repository&rsquo;s public frontier, so a session is a <strong>demonstration, not a
+    credential</strong> &mdash; and no private bank is involved anywhere.</p>
+    <ol>
+      <li><code>report_card_start</code> (no arguments) &rarr; <code>session_id</code> + 6 items.
+          Sessions are one-shot and expire in 15 minutes.</li>
+      <li>Each prompt asks you to repair a rejected graph conjecture: reply
+          <code>{"repair_expression": "&lt;DSL predicate&gt;"}</code>.</li>
+      <li><code>report_card_submit</code> with <code>{"session_id": &hellip;, "answers":
+          {"&lt;item_id&gt;": "&lt;reply&gt;"}}</code> &rarr; graded report. Unanswered items fail.
+          The session is destroyed by this call.</li>
+    </ol>
+    <h3>The DSL</h3>
+    <pre><code>features: n, m, density, max_degree, min_degree, is_connected, is_complete,
+          is_forest, is_tree, is_bipartite, is_triangle_free, max_degree_le_2,
+          has_universal_vertex, has_isolated_vertex, is_regular, num_components,
+          clique_number, girth
+syntax:   and, or, not, (<= < >= > == !=), integer/float literals, parentheses
+example:  (is_bipartite and has_isolated_vertex) and (max_degree_le_2)</code></pre>
+    <h3>The checker spec &mdash; no answer key exists</h3>
+    <p>Your expression passes iff it parses; matches at least one graph at n &le; 6; every
+    matching graph satisfies the claim (exhaustively verified); it is a strict refinement of
+    the item&rsquo;s original predicate; and it survives a stress pool of structured and random
+    graphs at n &isin; {7, 8}.</p>
+    <p>Passing items report <code>support_retention</code> &mdash; your match count over the
+    original&rsquo;s claim-satisfying match count. Retention below 5% is flagged
+    <code>degenerate_narrowing</code>: a trivially narrow refinement passes the checker, and the
+    report says exactly that. The gate does not flatter anyone, including its own operators.</p>
+
+    <h2 id="limits">Limits</h2>
+    <ul>
+      <li>Budgets are shared across REST and MCP: ~60 requests/min general; 4 report-card
+          sessions and 8 submits per hour per address; counterexample hunts 4 per 10 minutes
+          behind a single global worker.</li>
+      <li>After a restart the report card warms up (~2 min): <code>report_card_start</code>
+          answers &ldquo;warming up&rdquo; and <code>GET /api/health</code> shows
+          <code>report_card.ready</code>. Retry in a minute.</li>
+      <li>Grading holds a single CPU slot; if it is busy your session is spent by design &mdash;
+          start a fresh one.</li>
+    </ul>
+
+    <div class="warning">
+      <strong>Trust boundary.</strong> This process is stateless, never loads a private exam
+      bank, serves no private item content on any surface, and writes nothing to disk. Do not
+      send secrets or customer data. For real promotion decisions, run Whetstone inside your
+      own trust boundary &mdash; the <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">AGPL-3.0 repository</a>
+      ships the same tools as a CLI, localhost service, and stdio MCP server.
+    </div>
+  </main>
+
+  <footer>
+    <span>Whetstone Tools</span>
+    <span>AGPL-3.0 &middot; commercial licensing available</span>
+    <span><a href="/">human workbench</a> &middot; <a href="/skill.md">skill.md</a> &middot; <a href="/llms.txt">llms.txt</a></span>
+  </footer>
+</body>
+</html>

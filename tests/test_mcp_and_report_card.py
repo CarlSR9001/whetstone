@@ -240,6 +240,29 @@ def test_http_mcp_initialize_and_notification(toolbox_url):
     assert body is None
 
 
+def test_agent_docs_are_served(toolbox_url):
+    skill = urllib.request.urlopen(toolbox_url + "/skill.md", timeout=5)
+    assert skill.status == 200
+    assert skill.headers["Content-Type"].startswith("text/markdown")
+    body = skill.read().decode("utf-8")
+    assert body.startswith("---") and "name: whetstone-tools" in body
+    assert "report_card_submit" in body and "degenerate_narrowing" in body
+
+    page = urllib.request.urlopen(toolbox_url + "/for-agents", timeout=5)
+    assert page.status == 200
+    html = page.read().decode("utf-8")
+    assert "report_card_start" in html and "/skill.md" in html
+
+    llms = urllib.request.urlopen(toolbox_url + "/llms.txt", timeout=5).read().decode("utf-8")
+    assert "/skill.md" in llms and "/mcp" in llms and "/for-agents" in llms
+
+    try:
+        urllib.request.urlopen(toolbox_url + "/not-a-page", timeout=5)
+        raise AssertionError("expected 404")
+    except urllib.error.HTTPError as error:
+        assert error.code == 404
+
+
 def test_http_get_mcp_is_405_with_guidance(toolbox_url):
     request = urllib.request.Request(toolbox_url + "/mcp", method="GET")
     try:

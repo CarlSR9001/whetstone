@@ -45,7 +45,9 @@ INSTRUCTIONS = (
     "exam minted from the repository's public frontier, report_card_submit grades it by "
     "checker spec (any verified strict refinement passes; no answer key exists) and "
     "destroys the session. No private exam bank is loaded in this service, so no tool can "
-    "leak one. Complete request/response examples for every Tier 0 tool: GET /api/examples."
+    "leak one. Complete request/response examples for every Tier 0 tool: GET /api/examples. "
+    "Full agent documentation: https://whetstone.cyberelf.link/for-agents — installable "
+    "skill file: https://whetstone.cyberelf.link/skill.md"
 )
 
 
@@ -168,6 +170,9 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
             },
             "source": "https://github.com/CarlSR9001/whetstone",
             "site": "https://whetstone.cyberelf.link/",
+            "agent_docs": "https://whetstone.cyberelf.link/for-agents",
+            "skill_file": "https://whetstone.cyberelf.link/skill.md",
+            "llms_txt": "https://whetstone.cyberelf.link/llms.txt",
         },
         "What this service is: the tool catalog, the tier boundaries, and where the source lives.",
         {"type": "object", "properties": {}, "additionalProperties": False},

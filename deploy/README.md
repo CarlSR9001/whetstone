@@ -25,6 +25,7 @@ or document root with the personal site.
 /etc/nginx/sites-available/whetstone-tools
 /etc/nginx/sites-enabled/whetstone-tools
 /etc/nginx/conf.d/whetstone-rate-limit.conf
+/etc/letsencrypt/renewal-hooks/deploy/whetstone-reload-nginx
 ```
 
 Switching `current` is atomic. A release never overwrites another release or the
@@ -40,7 +41,8 @@ personal site.
 5. Extract into a new commit-named release, point `current` at it, install the
    unit, and verify `http://127.0.0.1:8988/api/health` on the VPS.
 6. Install the bootstrap vhost, validate Nginx, issue a host-specific certificate
-   with the ACME webroot, install the final vhost, validate again, then reload.
+   with the ACME webroot, install its tested renewal reload hook, install the
+   final vhost, validate again, then reload.
 7. Verify HTTPS, all eight API samples, certificate hostname, security headers,
    service sandbox score, and unchanged apex checksums.
 
@@ -52,6 +54,7 @@ Every Nginx change is staged into a temporary file first and accepted only after
 ```bash
 sudo rm -f /etc/nginx/sites-enabled/whetstone-tools
 sudo rm -f /etc/nginx/conf.d/whetstone-rate-limit.conf
+sudo rm -f /etc/letsencrypt/renewal-hooks/deploy/whetstone-reload-nginx
 sudo nginx -t && sudo systemctl reload nginx
 sudo systemctl disable --now whetstone-tools.service
 ```

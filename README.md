@@ -66,7 +66,11 @@ contents.
 The stateless toolbox turns eight mechanisms already in the repo into usable
 file-in/receipt-out surfaces: Whetstone Inspector, Eval Leak Auditor, Promotion
 Gate, Bank Health, SafePatch, Counterexample Hunter, Memory Relevance Debugger,
-and Agent Replay Console. The public instance at
+and Agent Replay Console. Each run exposes the decision path, an inspectable
+visual certificate, a SHA-256 receipt, and a task-specific downloadable
+artifact. Leakage analysis keeps exact identity, finite-corpus behavioral
+equivalence, and text-similarity review as separate evidence tiers; only the
+first two quarantine automatically. The public instance at
 [whetstone.cyberelf.link](https://whetstone.cyberelf.link/) accepts only caller
 supplied disposable data; it has no examiner bank, accounts, cookies, or upload
 persistence. Private exams belong in the CLI or a customer-controlled instance.

@@ -45,13 +45,15 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["stateless"] is True
     assert payload["private_bank_loaded"] is False
     assert payload["tools"] == 8
+    assert payload["version"] == "0.2.0"
     assert response.headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
 def test_index_and_evidence_are_public_but_sanitized(toolbox_url):
     html = urllib.request.urlopen(toolbox_url + "/", timeout=5).read().decode("utf-8")
-    assert "Eight small products" in html
+    assert "Stop asking whether it got better" in html
+    assert "resultViz" in html
     assert "Use disposable or sanitized inputs" in html
     evidence, _ = get_json(toolbox_url + "/api/evidence")
     assert evidence["cross_scale"]["models"] == 8

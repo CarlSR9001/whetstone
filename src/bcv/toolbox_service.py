@@ -33,7 +33,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -117,7 +117,7 @@ POST_ROUTES = {
 
 
 class ToolboxHandler(BaseHTTPRequestHandler):
-    server_version = "WhetstoneTools/0.1"
+    server_version = "WhetstoneTools/0.2"
 
     def log_message(self, format: str, *args) -> None:
         # Nginx records method/path/status.  The app deliberately never logs a body.

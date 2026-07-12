@@ -17,10 +17,18 @@ import time
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any
 
 from bcv.gate import exact_mcnemar_p_value, power_statement
-from bcv.markdown_editor import MarkdownPatch, PatchError, PatchOperation, apply_markdown_patch
+from bcv.markdown_editor import (
+    MarkdownPatch,
+    PatchError,
+    PatchOperation,
+    apply_markdown_patch,
+    parse_sections,
+    protected_tokens,
+)
 from bcv.memory_bench import Probe
 from bcv.memstore import Memory as StoredMemory
 from bcv.relevance import relevance_score, salience_prior
@@ -29,7 +37,7 @@ from bcv.relevance import relevance_score, salience_prior
 MAX_RECORDS = 5_000
 MAX_MARKDOWN_CHARS = 200_000
 MAX_EVENT_RECORDS = 5_000
-CONTENT_IDENTITY_FIELDS = ("prompt", "content", "input", "task", "question")
+CONTENT_IDENTITY_FIELDS = ("prompt", "content", "input", "task", "question", "expression")
 STOPWORDS = {
     "about", "after", "again", "against", "also", "because", "before", "being",
     "between", "could", "current", "does", "from", "have", "into", "memory",
@@ -145,42 +153,179 @@ def _identity_tokens(row: dict[str, Any]) -> dict[str, str]:
     return tokens
 
 
+def _content_value(row: dict[str, Any]) -> tuple[str, str] | None:
+    for field in CONTENT_IDENTITY_FIELDS:
+        value = row.get(field)
+        if isinstance(value, str) and value.strip():
+            return field, value.strip()
+    return None
+
+
+def _similarity_terms(text: str) -> set[str]:
+    terms = re.findall(r"[a-z0-9]+", text.lower().replace("'s", ""))
+    return {term for term in terms if len(term) > 1 and term not in STOPWORDS}
+
+
+def _text_similarity(left: set[str], right: set[str]) -> tuple[float, int]:
+    if not left or not right:
+        return 0.0, 0
+    shared = len(left & right)
+    if shared < 3:
+        return 0.0, shared
+    jaccard = shared / len(left | right)
+    containment = shared / min(len(left), len(right))
+    return round(0.6 * jaccard + 0.4 * containment, 6), shared
+
+
+@lru_cache(maxsize=3)
+def _dsl_observations(max_n: int) -> tuple[Any, ...]:
+    from bcv.discovery import enumerate_graphs, observe_graph
+
+    return tuple(observe_graph(graph) for graph in enumerate_graphs(max_n))
+
+
 def audit_leakage(payload: dict[str, Any]) -> dict[str, Any]:
     exam = _records(payload.get("exam", []), "exam")
     exposure = _records(payload.get("exposure", []), "exposure")
+    similarity_threshold = float(payload.get("similarity_threshold", 0.6))
+    if not 0.5 <= similarity_threshold <= 1.0:
+        raise ProductInputError("similarity_threshold must be in [0.5, 1.0]")
+    fingerprint_max_n = int(payload.get("fingerprint_max_n", 4))
+    if not 3 <= fingerprint_max_n <= 5:
+        raise ProductInputError("fingerprint_max_n must be between 3 and 5")
+
     exposure_index: dict[str, list[dict[str, str]]] = defaultdict(list)
     for index, row in enumerate(exposure):
         source = str(row.get("source") or row.get("path") or f"exposure row {index + 1}")
         for token, reason in _identity_tokens(row).items():
             exposure_index[token].append({"source": source, "reason": reason})
 
-    clean_exam: list[dict[str, Any]] = []
-    quarantined: list[dict[str, Any]] = []
+    exam_rows: list[tuple[str, dict[str, Any]]] = []
+    matches_by_item: dict[str, list[dict[str, Any]]] = defaultdict(list)
     seen_ids: set[str] = set()
     for index, row in enumerate(exam):
         item_id = _item_id(row, "exam", index)
         if item_id in seen_ids:
             raise ProductInputError(f"exam has duplicate item_id {item_id}")
         seen_ids.add(item_id)
-        matches: list[dict[str, str]] = []
+        exam_rows.append((item_id, row))
         for token, exam_reason in _identity_tokens(row).items():
             for match in exposure_index.get(token, ()):  # exact identity only
-                matches.append({
+                matches_by_item[item_id].append({
                     "reason": "row_identity" if exam_reason in {"item_id", "id", "exposure_key"} else exam_reason,
                     "source": match["source"],
+                    "tier": "exact",
                 })
-        if matches:
-            unique = sorted({(m["reason"], m["source"]) for m in matches})
+
+    # Graph-DSL behavioral equivalence is stronger than text similarity: it
+    # compares the complete truth vector over a declared finite oracle corpus.
+    # It can therefore quarantine, while still reporting the finite-horizon
+    # false-merge boundary explicitly.
+    dsl_exam = [(item_id, row["expression"]) for item_id, row in exam_rows if isinstance(row.get("expression"), str)]
+    dsl_exposure = [
+        (str(row.get("source") or row.get("path") or f"exposure row {index + 1}"), row["expression"])
+        for index, row in enumerate(exposure)
+        if isinstance(row.get("expression"), str)
+    ]
+    fingerprint_rows = 0
+    fingerprint_warnings: list[str] = []
+    if dsl_exam and dsl_exposure and bool(payload.get("enable_behavioral_fingerprint", True)):
+        from bcv.leakage import behavioral_fingerprint
+
+        observations = _dsl_observations(fingerprint_max_n)
+        fingerprint_rows = len(observations)
+        exposure_fingerprints: dict[str, list[str]] = defaultdict(list)
+        for source, expression in dsl_exposure:
+            try:
+                exposure_fingerprints[behavioral_fingerprint(expression, observations)].append(source)
+            except (SyntaxError, ValueError, TypeError, KeyError) as error:
+                fingerprint_warnings.append(f"skipped unparseable exposure expression: {type(error).__name__}")
+        for item_id, expression in dsl_exam:
+            try:
+                digest = behavioral_fingerprint(expression, observations)
+            except (SyntaxError, ValueError, TypeError, KeyError) as error:
+                fingerprint_warnings.append(f"skipped unparseable exam expression {item_id}: {type(error).__name__}")
+                continue
+            for source in exposure_fingerprints.get(digest, ()):
+                matches_by_item[item_id].append({
+                    "reason": "behavioral_fingerprint",
+                    "source": source,
+                    "tier": "behavioral",
+                })
+
+    # Text similarity is intentionally a human-review queue, never an automatic
+    # quarantine. It uses no embeddings or external service and never reflects
+    # the matched training text back to the caller.
+    exposure_text: list[dict[str, Any]] = []
+    inverted: dict[str, set[int]] = defaultdict(set)
+    for index, row in enumerate(exposure):
+        content = _content_value(row)
+        if content is None or content[0] == "expression":
+            continue
+        field, value = content
+        terms = _similarity_terms(value)
+        record = {
+            "source": str(row.get("source") or row.get("path") or f"exposure row {index + 1}"),
+            "field": field,
+            "terms": terms,
+            "exact_digest": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+        }
+        exposure_text.append(record)
+        for term in terms:
+            inverted[term].add(len(exposure_text) - 1)
+
+    review_queue: list[dict[str, Any]] = []
+    if bool(payload.get("enable_text_similarity", True)):
+        for item_id, row in exam_rows:
+            content = _content_value(row)
+            if content is None or content[0] == "expression":
+                continue
+            field, value = content
+            terms = _similarity_terms(value)
+            candidates: set[int] = set()
+            for term in terms:
+                candidates.update(inverted.get(term, ()))
+            scored = []
+            digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+            for candidate_index in candidates:
+                candidate = exposure_text[candidate_index]
+                if candidate["exact_digest"] == digest:
+                    continue
+                score, shared = _text_similarity(terms, candidate["terms"])
+                if score >= similarity_threshold:
+                    scored.append({
+                        "item_id": item_id,
+                        "score": score,
+                        "shared_terms": shared,
+                        "exam_field": field,
+                        "exposure_field": candidate["field"],
+                        "source": candidate["source"],
+                        "action": "human_review",
+                    })
+            review_queue.extend(sorted(scored, key=lambda row: (-row["score"], row["source"]))[:3])
+
+    quarantined = []
+    clean_exam = []
+    tier_items: dict[str, set[str]] = defaultdict(set)
+    for item_id, row in exam_rows:
+        raw_matches = matches_by_item.get(item_id, [])
+        unique = sorted({(m["tier"], m["reason"], m["source"]) for m in raw_matches})
+        if unique:
+            for tier, _, _ in unique:
+                tier_items[tier].add(item_id)
             quarantined.append({
                 "item_id": item_id,
-                "matches": [{"reason": reason, "source": source} for reason, source in unique],
+                "matches": [
+                    {"tier": tier, "reason": reason, "source": source}
+                    for tier, reason, source in unique
+                ],
             })
         else:
             clean_exam.append(row)
 
     summary = {
-        "schema_version": 1,
-        "exact_identity_only": True,
+        "schema_version": 2,
+        "exact_identity_only": not bool(tier_items.get("behavioral")),
         "exam_items": len(exam),
         "exposure_rows": len(exposure),
         "quarantined_items": len(quarantined),
@@ -188,8 +333,34 @@ def audit_leakage(payload: dict[str, Any]) -> dict[str, Any]:
         "exposure_rate": round(len(quarantined) / len(exam), 6) if exam else 0.0,
         "quarantined": quarantined,
         "clean_exam": clean_exam,
-        "input_sha256": _sha256({"exam": exam, "exposure": exposure}),
-        "claim_boundary": "Declared/exact identity only; no semantic near-duplicate claim is made.",
+        "tier_counts": {tier: len(items) for tier, items in sorted(tier_items.items())},
+        "review_queue": sorted(review_queue, key=lambda row: (-row["score"], row["item_id"])),
+        "analysis_tiers": {
+            "exact_identity": {"enabled": True, "action": "quarantine", "items": len(tier_items.get("exact", ()))},
+            "behavioral_fingerprint": {
+                "enabled": bool(dsl_exam and dsl_exposure),
+                "action": "quarantine",
+                "items": len(tier_items.get("behavioral", ())),
+                "corpus_max_n": fingerprint_max_n,
+                "observations": fingerprint_rows,
+                "boundary": "Equivalent on this finite graph corpus; expressions may diverge beyond the declared horizon.",
+            },
+            "text_similarity": {
+                "enabled": bool(payload.get("enable_text_similarity", True)),
+                "action": "human_review_only",
+                "threshold": similarity_threshold,
+                "candidates": len(review_queue),
+                "boundary": "Token-overlap triage, not semantic equivalence and never an automatic quarantine.",
+            },
+        },
+        "analysis_warnings": sorted(set(fingerprint_warnings)),
+        "input_sha256": _sha256({
+            "exam": exam,
+            "exposure": exposure,
+            "fingerprint_max_n": fingerprint_max_n,
+            "similarity_threshold": similarity_threshold,
+        }),
+        "claim_boundary": "Exact identity and finite-corpus DSL behavior can quarantine; text similarity is not semantic proof and only creates a human-review queue.",
     }
     summary["receipt_sha256"] = _sha256({key: value for key, value in summary.items() if key != "receipt_sha256"})
     return summary
@@ -229,6 +400,32 @@ def _retained_probe(raw: Any) -> dict[str, Any] | None:
     }
 
 
+def _score_summary(results: dict[str, bool]) -> dict[str, int | float]:
+    passed = sum(results.values())
+    total = len(results)
+    return {
+        "passed": passed,
+        "failed": total - passed,
+        "total": total,
+        "rate": round(passed / total, 6) if total else 0.0,
+    }
+
+
+def _additional_clean_gains_needed(
+    gains: int,
+    regressions: int,
+    policy: dict[str, Any],
+) -> int | None:
+    if regressions > policy["max_regressions"]:
+        return None
+    for additional in range(0, 1_001):
+        if gains + additional < policy["min_gains"]:
+            continue
+        if exact_mcnemar_p_value(gains + additional, regressions) <= policy["confidence_alpha"]:
+            return additional
+    return None
+
+
 def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
     baseline = parse_results(payload.get("baseline", {}), "baseline")
     candidate = parse_results(payload.get("candidate", {}), "candidate")
@@ -251,8 +448,17 @@ def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
         regressions += outcome == "regression"
         ties += outcome == "tie"
         domain = domains.get(item_id, "unlabeled")
-        bucket = by_domain.setdefault(domain, {"items": 0, "gains": 0, "regressions": 0, "ties": 0})
+        bucket = by_domain.setdefault(domain, {
+            "items": 0,
+            "baseline_passes": 0,
+            "candidate_passes": 0,
+            "gains": 0,
+            "regressions": 0,
+            "ties": 0,
+        })
         bucket["items"] += 1
+        bucket["baseline_passes"] += int(before)
+        bucket["candidate_passes"] += int(after)
         bucket[f"{outcome}s"] += 1
         item_rows.append({
             "item_id": item_id,
@@ -282,6 +488,51 @@ def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
         verdict = "PASS"
         reasons.append("regression policy held and the paired evidence passed the confidence threshold")
 
+    for bucket in by_domain.values():
+        bucket["delta"] = bucket["candidate_passes"] - bucket["baseline_passes"]
+
+    additional_clean_gains = _additional_clean_gains_needed(gains, regressions, policy)
+    if verdict == "PASS":
+        next_action = "Promote the candidate and preserve this receipt with the exact item-set commitment."
+    elif regressions > policy["max_regressions"]:
+        regressed_items = [row["item_id"] for row in item_rows if row["outcome"] == "regression"]
+        next_action = f"Diagnose or explicitly waive the regression set before rerunning: {', '.join(regressed_items)}."
+    elif policy["require_retained_probe"] and (retained is None or not retained["no_regression"]):
+        next_action = "Restore the retained capability probe before collecting more promotion evidence."
+    elif additional_clean_gains is not None:
+        next_action = f"Add {additional_clean_gains} clean paired gain(s) with zero new regressions to reach the current policy threshold."
+    else:
+        next_action = "Collect a larger paired cohort or revise the policy explicitly; this receipt cannot identify a finite clean-win path."
+
+    decision_path = [
+        {
+            "check": "regression_budget",
+            "state": "pass" if regressions <= policy["max_regressions"] else "fail",
+            "observed": regressions,
+            "requirement": f"<= {policy['max_regressions']}",
+        },
+        {
+            "check": "retained_probe",
+            "state": "not_required" if not policy["require_retained_probe"] else "pass" if retained and retained["no_regression"] else "fail",
+            "observed": retained["delta"] if retained else None,
+            "requirement": "no regression" if policy["require_retained_probe"] else "not required",
+        },
+        {
+            "check": "minimum_gains",
+            "state": "pass" if gains >= policy["min_gains"] else "hold",
+            "observed": gains,
+            "requirement": f">= {policy['min_gains']}",
+        },
+        {
+            "check": "paired_exact_test",
+            "state": "pass" if p_value <= policy["confidence_alpha"] else "hold",
+            "observed": p_value,
+            "requirement": f"<= {policy['confidence_alpha']}",
+        },
+    ]
+
+    baseline_score = _score_summary(baseline)
+    candidate_score = _score_summary(candidate)
     stable_input = {
         "baseline": baseline,
         "candidate": candidate,
@@ -290,7 +541,7 @@ def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
         "retained_probe": retained,
     }
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "verdict": verdict,
         "reasons": reasons,
@@ -299,6 +550,14 @@ def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
             "candidate": str(payload.get("candidate_name", "candidate")),
         },
         "policy": policy,
+        "scorecard": {
+            "baseline": baseline_score,
+            "candidate": candidate_score,
+            "pass_delta": candidate_score["passed"] - baseline_score["passed"],
+            "rate_delta": round(candidate_score["rate"] - baseline_score["rate"], 6),
+        },
+        "decision_path": decision_path,
+        "next_action": next_action,
         "paired_evidence": {
             "items": len(item_rows),
             "item_set_sha256": _sha256(sorted(baseline)),
@@ -307,6 +566,7 @@ def gate_results(payload: dict[str, Any]) -> dict[str, Any]:
             "ties": ties,
             "exact_mcnemar_two_sided_p": p_value,
             "resolution": power_statement(gains, regressions, policy["confidence_alpha"]),
+            "additional_clean_gains_needed": additional_clean_gains,
             "by_domain": dict(sorted(by_domain.items())),
             "items_detail": item_rows,
         },
@@ -331,6 +591,9 @@ def inspect_promotion(payload: dict[str, Any]) -> dict[str, Any]:
     missing_candidate = sorted(clean_ids - set(candidate_clean))
     unknown_results = sorted((set(baseline) | set(candidate)) - exam_ids)
     complete = bool(clean_ids) and not missing_baseline and not missing_candidate and set(baseline_clean) == set(candidate_clean)
+    raw_ids = exam_ids & set(baseline) & set(candidate)
+    baseline_raw = {item: baseline[item] for item in raw_ids}
+    candidate_raw = {item: candidate[item] for item in raw_ids}
 
     cohort = {
         "complete": complete,
@@ -357,16 +620,51 @@ def inspect_promotion(payload: dict[str, Any]) -> dict[str, Any]:
         })
     else:
         gate = {
-            "schema_version": 1,
+            "schema_version": 2,
             "verdict": "HOLD",
             "reasons": ["no decision: both systems must cover the complete post-quarantine cohort"],
             "paired_evidence": {"items": 0, "gains": 0, "regressions": 0, "ties": 0},
+            "next_action": "Grade both systems on every clean item; partial intersections are never treated as evidence.",
+            "decision_path": [{
+                "check": "complete_clean_cohort",
+                "state": "hold",
+                "observed": len(set(baseline_clean) & set(candidate_clean)),
+                "requirement": len(clean_ids),
+            }],
         }
+    raw_baseline_score = _score_summary(baseline_raw)
+    raw_candidate_score = _score_summary(candidate_raw)
+    clean_baseline_score = _score_summary(baseline_clean)
+    clean_candidate_score = _score_summary(candidate_clean)
+    quarantined_with_results = quarantined_ids & raw_ids
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "audit": audit,
         "cohort": cohort,
         "gate": gate,
+        "pipeline": [
+            {"stage": "ingest", "state": "pass", "detail": f"{len(exam_rows)} exam items; {len(raw_ids)} paired results"},
+            {"stage": "exposure_audit", "state": "pass" if not audit["quarantined_items"] else "quarantine", "detail": f"{audit['quarantined_items']} removed; {len(audit['review_queue'])} queued for review"},
+            {"stage": "cohort_proof", "state": "pass" if complete else "hold", "detail": f"{len(clean_ids)} eligible items"},
+            {"stage": "promotion_gate", "state": gate["verdict"].lower(), "detail": gate["reasons"][0]},
+        ],
+        "scorecard": {
+            "raw": {
+                "baseline": raw_baseline_score,
+                "candidate": raw_candidate_score,
+                "pass_delta": raw_candidate_score["passed"] - raw_baseline_score["passed"],
+            },
+            "clean": {
+                "baseline": clean_baseline_score,
+                "candidate": clean_candidate_score,
+                "pass_delta": clean_candidate_score["passed"] - clean_baseline_score["passed"],
+            },
+            "quarantine_impact": {
+                "paired_items_removed": len(quarantined_with_results),
+                "baseline_passes_removed": sum(baseline[item] for item in quarantined_with_results),
+                "candidate_passes_removed": sum(candidate[item] for item in quarantined_with_results),
+            },
+        },
     }
     # Hash only the stable sub-receipts and decision inputs.  gate_results carries
     # a human-readable generated_at timestamp, but repeating the same inspection
@@ -392,6 +690,7 @@ def bank_health(payload: dict[str, Any]) -> dict[str, Any]:
     if not history:
         raise ProductInputError("history needs at least one {item_id, system, passed} row")
     stats: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    system_totals: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     for index, row in enumerate(history):
         item_id = _item_id(row, "history", index)
         system = row.get("system")
@@ -399,6 +698,8 @@ def bank_health(payload: dict[str, Any]) -> dict[str, Any]:
             raise ProductInputError(f"history row {index + 1} needs a system")
         passed = _as_bool(row.get("passed", row.get("outcome")), f"history row {index + 1} outcome")
         stats[item_id][system.strip()][0 if passed else 1] += 1
+        system_totals[system.strip()][0] += int(passed)
+        system_totals[system.strip()][1] += 1
         domains.setdefault(item_id, str(row.get("domain", "unlabeled")))
 
     rows = []
@@ -427,6 +728,15 @@ def bank_health(payload: dict[str, Any]) -> dict[str, Any]:
             classification = "discriminating"
         else:
             classification = "flat"
+        action = {
+            "under_observed": "collect_more_grades",
+            "saturated": "retire_or_mill_harder",
+            "too_hard": "mill_easier_variants",
+            "flaky": "review_or_retire",
+            "discriminating": "retain",
+            "flat": "refresh_or_retire",
+        }[classification]
+        mean_pass_rate = sum(rates.values()) / len(rates) if rates else 0.0
         rows.append({
             "item_id": item_id,
             "domain": domains.get(item_id, "unlabeled"),
@@ -435,7 +745,12 @@ def bank_health(payload: dict[str, Any]) -> dict[str, Any]:
             "pass_rates": rates,
             "discrimination": discrimination,
             "max_within_system_flip_rate": round(max_flip_rate, 6),
+            "mean_pass_rate": round(mean_pass_rate, 6),
+            "difficulty": round(1.0 - mean_pass_rate, 6),
+            "reliability": round(1.0 - max_flip_rate, 6),
+            "utility": round(discrimination * (1.0 - max_flip_rate), 6),
             "classification": classification,
+            "recommended_action": action,
         })
 
     by_class: dict[str, int] = defaultdict(int)
@@ -444,15 +759,74 @@ def bank_health(payload: dict[str, Any]) -> dict[str, Any]:
         by_class[row["classification"]] += 1
         by_domain[row["domain"]]["items"] += 1
         by_domain[row["domain"]]["discriminating"] += row["classification"] == "discriminating"
+    domain_detail = {}
+    for domain, counts in sorted(by_domain.items()):
+        ratio = counts["discriminating"] / counts["items"] if counts["items"] else 0.0
+        domain_detail[domain] = {
+            **counts,
+            "discriminator_share": round(ratio, 6),
+            "state": "covered" if counts["discriminating"] else "frontier_gap",
+        }
+    item_count = len(rows)
+    domain_count = len(domain_detail)
+    readiness_components = {
+        "discriminator_share": round(by_class.get("discriminating", 0) / item_count, 6) if item_count else 0.0,
+        "stable_share": round((item_count - by_class.get("flaky", 0)) / item_count, 6) if item_count else 0.0,
+        "observed_share": round(sum(row["systems"] >= 2 for row in rows) / item_count, 6) if item_count else 0.0,
+        "domain_coverage": round(sum(value["state"] == "covered" for value in domain_detail.values()) / domain_count, 6) if domain_count else 0.0,
+    }
+    readiness_index = round(100 * sum(readiness_components.values()) / len(readiness_components), 1)
+    action_priority = {
+        "review_or_retire": 0,
+        "collect_more_grades": 1,
+        "mill_easier_variants": 2,
+        "retire_or_mill_harder": 3,
+        "refresh_or_retire": 4,
+        "retain": 5,
+    }
+    action_queue = sorted(
+        [
+            {
+                "item_id": row["item_id"],
+                "domain": row["domain"],
+                "classification": row["classification"],
+                "action": row["recommended_action"],
+                "utility": row["utility"],
+            }
+            for row in rows
+            if row["recommended_action"] != "retain"
+        ],
+        key=lambda row: (action_priority[row["action"]], row["utility"], row["item_id"]),
+    )
+    system_ladder = sorted(
+        [
+            {
+                "system": system,
+                "passed": totals[0],
+                "observations": totals[1],
+                "pass_rate": round(totals[0] / totals[1], 6) if totals[1] else 0.0,
+            }
+            for system, totals in system_totals.items()
+        ],
+        key=lambda row: (row["pass_rate"], row["system"]),
+    )
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "items": len(rows),
         "systems": sorted({system for item in stats.values() for system in item}),
+        "system_ladder": system_ladder,
         "classification_counts": dict(sorted(by_class.items())),
-        "by_domain": dict(sorted(by_domain.items())),
+        "by_domain": domain_detail,
         "frontier_gaps": sorted(domain for domain, counts in by_domain.items() if counts["discriminating"] == 0),
         "retirement_candidates": [row["item_id"] for row in rows if row["classification"] == "saturated"],
+        "readiness": {
+            "index": readiness_index,
+            "components": readiness_components,
+            "boundary": "Transparent four-component operability heuristic, not an IRT or psychometric validity claim.",
+        },
+        "action_queue": action_queue,
         "items_detail": rows,
+        "claim_boundary": "Descriptive history diagnostics; sparse grades and system selection still bound every conclusion.",
         "input_sha256": _sha256({"items": definitions, "history": history}),
     }
     result["receipt_sha256"] = _sha256(result)
@@ -490,12 +864,45 @@ def safe_patch(payload: dict[str, Any]) -> dict[str, Any]:
         fromfile="original.md",
         tofile="patched.md",
     ))
+    original_sections = {section.heading: section.text for section in parse_sections(document)}
+    updated_sections = {section.heading: section.text for section in parse_sections(updated)}
+    changed_headings = sorted({operation.target_heading for operation in operations})
+    section_receipts = []
+    for heading in changed_headings:
+        before = original_sections[heading]
+        after = updated_sections[heading]
+        before_tokens = protected_tokens(before)
+        after_tokens = protected_tokens(after)
+        section_receipts.append({
+            "heading": heading,
+            "original_sha256": hashlib.sha256(before.encode("utf-8")).hexdigest(),
+            "updated_sha256": hashlib.sha256(after.encode("utf-8")).hexdigest(),
+            "character_delta": len(after) - len(before),
+            "protected_tokens_before": len(before_tokens),
+            "protected_tokens_after": len(after_tokens),
+            "protected_tokens_removed": sorted(before_tokens - after_tokens),
+        })
+    diff_lines = diff.splitlines()
+    added_lines = sum(line.startswith("+") and not line.startswith("+++") for line in diff_lines)
+    removed_lines = sum(line.startswith("-") and not line.startswith("---") for line in diff_lines)
+    untouched = sorted(set(original_sections) - set(changed_headings))
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "accepted": True,
         "updated_document": updated,
         "unified_diff": diff,
-        "changed_sections": sorted({operation.target_heading for operation in operations}),
+        "changed_sections": changed_headings,
+        "untouched_sections": untouched,
+        "section_receipts": section_receipts,
+        "diff_stats": {
+            "operations": len(operations),
+            "added_lines": added_lines,
+            "removed_lines": removed_lines,
+            "character_delta": len(updated) - len(document),
+            "sections_total": len(original_sections),
+            "sections_changed": len(changed_headings),
+            "sections_untouched": len(untouched),
+        },
         "checks": {
             "patch_applied_cleanly": True,
             "untargeted_sections_byte_identical": True,
@@ -571,6 +978,7 @@ def memory_relevance(payload: dict[str, Any]) -> dict[str, Any]:
             "id": memory.id,
             "content": memory.content,
             "entities": list(memory.entities),
+            "token_cost": len(memory.content.split()),
             "salience": salience_prior(memory, context, rarity),
             "relevance": relevance_score(memory, probe, context, rarity),
         })
@@ -595,20 +1003,53 @@ def memory_relevance(payload: dict[str, Any]) -> dict[str, Any]:
     token_budget = int(payload.get("token_budget", 90))
     if token_budget < 1 or token_budget > 10_000:
         raise ProductInputError("token_budget must be between 1 and 10000")
-    selected = []
-    used = 0
-    for row in relevance_order:
-        cost = len(row["content"].split())
-        if used + cost <= token_budget:
-            selected.append(row["id"])
-            used += cost
+    def select(order: list[dict[str, Any]]) -> tuple[list[int], int]:
+        selected_ids = []
+        used_tokens = 0
+        for item in order:
+            cost = item["token_cost"]
+            if used_tokens + cost <= token_budget:
+                selected_ids.append(item["id"])
+                used_tokens += cost
+        return selected_ids, used_tokens
+
+    selected, used = select(relevance_order)
+    salience_selected, salience_used = select(salience_order)
+    selected_set = set(selected)
+    salience_set = set(salience_selected)
+    for row in scored:
+        row["selected_by_relevance"] = row["id"] in selected_set
+        row["selected_by_salience"] = row["id"] in salience_set
+    n = len(scored)
+    rank_correlation = (
+        round(1 - 6 * sum((row["salience_rank"] - row["relevance_rank"]) ** 2 for row in scored) / (n * (n * n - 1)), 6)
+        if n > 1 else 1.0
+    )
+    salience_waste = sum(row["token_cost"] for row in scored if row["id"] in salience_set and row["relevance"] < 0)
+    relevance_waste = sum(row["token_cost"] for row in scored if row["id"] in selected_set and row["relevance"] < 0)
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "objective": objective,
         "objective_entities": list(objective_entities),
         "token_budget": token_budget,
         "selected_by_relevance": selected,
         "selected_tokens": used,
+        "selected_by_salience": salience_selected,
+        "salience_selected_tokens": salience_used,
+        "rank_correlation": rank_correlation,
+        "budget_comparison": {
+            "relevance": {
+                "selected": selected,
+                "tokens": used,
+                "negative_relevance_tokens": relevance_waste,
+            },
+            "salience": {
+                "selected": salience_selected,
+                "tokens": salience_used,
+                "negative_relevance_tokens": salience_waste,
+            },
+            "attention_waste_avoided_tokens": salience_waste - relevance_waste,
+        },
         "shiny_traps": [row["id"] for row in scored if row["classification"] == "shiny_trap"],
         "boring_but_decisive": [row["id"] for row in scored if row["classification"] == "boring_but_decisive"],
         "ranking": sorted(scored, key=lambda row: row["relevance_rank"]),
@@ -623,12 +1064,16 @@ def replay_trace(payload: dict[str, Any]) -> dict[str, Any]:
     if raw_events is None and isinstance(payload.get("result"), dict):
         raw_events = payload["result"].get("events")
     events = _records(raw_events or [], "events", limit=MAX_EVENT_RECORDS)
-    checkpoints: dict[str, int] = {}
+    checkpoints: dict[str, dict[str, int]] = {}
     controls: dict[str, int] = defaultdict(int)
     notes = [str(note) for note in payload.get("notes", [])] if isinstance(payload.get("notes", []), list) else []
     timeline = []
     branch = 0
+    branches: dict[int, dict[str, Any]] = {
+        0: {"id": 0, "parent": None, "started_at": None, "rewind_target": None, "events": 0, "verdicts": []}
+    }
     rewinds = []
+    verifier_accepts = verifier_rejects = 0
     for index, event in enumerate(events):
         step = int(event.get("step", index + 1))
         kind = str(event.get("kind", "event"))
@@ -640,13 +1085,39 @@ def replay_trace(payload: dict[str, Any]) -> dict[str, Any]:
                 controls[control] += 1
                 argument = detail[len(control):].strip()
                 if control == "SAVE" and argument:
-                    checkpoints[argument.split()[0]] = step
+                    checkpoints[argument.split()[0]] = {"step": step, "branch": branch}
                 elif control == "LOAD":
                     target, _, note = argument.partition("::")
+                    parent = branch
                     branch += 1
-                    rewinds.append({"step": step, "target": target.strip(), "target_step": checkpoints.get(target.strip())})
+                    checkpoint = checkpoints.get(target.strip())
+                    branches[branch] = {
+                        "id": branch,
+                        "parent": parent,
+                        "started_at": step,
+                        "rewind_target": target.strip(),
+                        "rewind_target_step": checkpoint["step"] if checkpoint else None,
+                        "events": 0,
+                        "verdicts": [],
+                    }
+                    rewinds.append({
+                        "step": step,
+                        "from_branch": parent,
+                        "to_branch": branch,
+                        "target": target.strip(),
+                        "target_step": checkpoint["step"] if checkpoint else None,
+                        "target_branch": checkpoint["branch"] if checkpoint else None,
+                    })
                     if note.strip():
                         notes.append(note.strip())
+        normalized_detail = detail.upper()
+        if kind == "verifier" and "ACCEPT" in normalized_detail:
+            verifier_accepts += 1
+            branches[branch]["verdicts"].append("ACCEPT")
+        elif kind == "verifier" and "REJECT" in normalized_detail:
+            verifier_rejects += 1
+            branches[branch]["verdicts"].append("REJECT")
+        branches[branch]["events"] += 1
         timeline.append({
             "step": step,
             "kind": kind,
@@ -655,12 +1126,32 @@ def replay_trace(payload: dict[str, Any]) -> dict[str, Any]:
             "branch": branch,
             "source": str(event.get("source", "native")),
         })
+    final_branch = branch
+    critical_path = []
+    cursor: int | None = final_branch
+    while cursor is not None:
+        critical_path.append(cursor)
+        cursor = branches[cursor]["parent"]
+    critical_path.reverse()
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "events": len(events),
         "controls": dict(sorted(controls.items())),
-        "checkpoints": [{"name": name, "step": step} for name, step in sorted(checkpoints.items())],
+        "checkpoints": [{"name": name, "step": value["step"]} for name, value in sorted(checkpoints.items())],
+        "checkpoint_detail": [
+            {"name": name, "step": value["step"], "branch": value["branch"]}
+            for name, value in sorted(checkpoints.items())
+        ],
         "rewinds": rewinds,
+        "branches": [branches[index] for index in sorted(branches)],
+        "critical_path": critical_path,
+        "final_branch": final_branch,
+        "verifier_summary": {
+            "accepts": verifier_accepts,
+            "rejects": verifier_rejects,
+            "accept_rate": round(verifier_accepts / (verifier_accepts + verifier_rejects), 6)
+            if verifier_accepts + verifier_rejects else 0.0,
+        },
         "notes": list(dict.fromkeys(notes)),
         "external_interventions": sum(1 for row in timeline if row["source"] != "native"),
         "timeline": timeline,
@@ -668,6 +1159,49 @@ def replay_trace(payload: dict[str, Any]) -> dict[str, Any]:
     }
     result["receipt_sha256"] = _sha256(result)
     return result
+
+
+def _greedy_coloring_certificate(graph: Any) -> tuple[list[int], dict[int, int]]:
+    adjacency = graph.adjacency()
+    degrees = graph.degrees()
+    order = sorted(range(graph.n), key=lambda node: (-degrees[node], node))
+    assignment: dict[int, int] = {}
+    for node in order:
+        used = {assignment[neighbor] for neighbor in adjacency[node] if neighbor in assignment}
+        color = 0
+        while color in used:
+            color += 1
+        assignment[node] = color
+    return order, assignment
+
+
+def _exact_coloring_certificate(graph: Any, color_count: int) -> dict[int, int]:
+    adjacency = graph.adjacency()
+    degrees = graph.degrees()
+    order = sorted(range(graph.n), key=lambda node: (-degrees[node], node))
+    assignment: dict[int, int] = {}
+
+    def search(position: int) -> bool:
+        if position == len(order):
+            return True
+        node = order[position]
+        used = {assignment[neighbor] for neighbor in adjacency[node] if neighbor in assignment}
+        for color in range(color_count):
+            if color in used:
+                continue
+            assignment[node] = color
+            if search(position + 1):
+                return True
+            del assignment[node]
+        return False
+
+    if not search(0):
+        raise ProductInputError("internal exact-coloring certificate construction failed")
+    return assignment
+
+
+def _proper_coloring(edges: list[list[int]] | tuple[tuple[int, int], ...], assignment: dict[int, int]) -> bool:
+    return all(assignment[int(left)] != assignment[int(right)] for left, right in edges)
 
 
 def hunt_counterexample(payload: dict[str, Any]) -> dict[str, Any]:
@@ -696,7 +1230,7 @@ def hunt_counterexample(payload: dict[str, Any]) -> dict[str, Any]:
         raise ProductInputError(str(error)) from error
     find = asdict(attack.find) if attack.find is not None else None
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "expression": expression.strip(),
         "status": "FALSIFIED" if attack.falsified else "NOT_FALSIFIED_WITHIN_BUDGET",
         "falsified": attack.falsified,
@@ -713,20 +1247,59 @@ def hunt_counterexample(payload: dict[str, Any]) -> dict[str, Any]:
         "claim_boundary": "A found witness is exact. Failure to find one within this bounded search is not a proof.",
     }
     if find is not None:
+        from bcv.discovery import Graph, graph_features
+
+        graph = Graph(n=int(find["n"]), edges=tuple(tuple(edge) for edge in find["edges"]))
+        greedy_order, greedy_assignment = _greedy_coloring_certificate(graph)
+        optimal_assignment = _exact_coloring_certificate(graph, int(find["chromatic_number"]))
+        degrees = graph.degrees()
+        result["witness"] = {
+            "gap": int(find["greedy_colors"]) - int(find["chromatic_number"]),
+            "features": graph_features(graph),
+            "greedy_order": greedy_order,
+            "nodes": [
+                {
+                    "id": node,
+                    "degree": degrees[node],
+                    "greedy_color": greedy_assignment[node],
+                    "optimal_color": optimal_assignment[node],
+                    "greedy_order": greedy_order.index(node) + 1,
+                }
+                for node in range(graph.n)
+            ],
+            "checks": {
+                "greedy_coloring_proper": _proper_coloring(find["edges"], greedy_assignment),
+                "optimal_coloring_proper": _proper_coloring(find["edges"], optimal_assignment),
+                "strict_gap_verified": len(set(greedy_assignment.values())) > len(set(optimal_assignment.values())),
+            },
+        }
         result["certificate_sha256"] = _sha256(find)
     result["receipt_sha256"] = _sha256(result)
     return result
 
 
 def examples() -> dict[str, Any]:
+    prompts = (
+        "Repair a Python retry loop without changing its public return type.",
+        "Reject a malformed JSON payload while preserving valid zero values.",
+        "Identify the smallest safe patch for an off-by-one pagination bug.",
+        "Keep an asynchronous worker idempotent after a duplicate delivery.",
+        "Explain a delayed shipment without inventing a delivery date.",
+        "Apply the refund policy while preserving the stated eligibility window.",
+        "Reset a locked customer password after identity verification.",
+        "Summarize a refund policy without changing eligibility dates.",
+    )
     exam = [
-        {"item_id": f"item-{index}", "domain": "code" if index <= 4 else "support", "prompt": f"Disposable demo item {index}"}
-        for index in range(1, 9)
+        {"item_id": f"item-{index}", "domain": "code" if index <= 4 else "support", "prompt": prompt}
+        for index, prompt in enumerate(prompts, 1)
     ]
     return {
         "inspector": {
             "exam": exam,
-            "exposure": [{"item_id": "item-8", "source": "training.jsonl:42"}],
+            "exposure": [
+                {"item_id": "item-8", "source": "training.jsonl:42"},
+                {"prompt": "After identity verification, safely reset the locked customer password.", "source": "support-sft.jsonl:91"},
+            ],
             "baseline": {f"item-{index}": False for index in range(1, 9)},
             "candidate": {**{f"item-{index}": index <= 6 for index in range(1, 8)}, "item-8": True},
             "baseline_name": "v1",
@@ -734,13 +1307,24 @@ def examples() -> dict[str, Any]:
             "policy": {"min_gains": 1, "max_regressions": 0, "confidence_alpha": 0.05},
         },
         "leakage": {
-            "exam": exam[:3],
-            "exposure": [{"prompt": "Disposable demo item 2", "source": "declared-training.jsonl:7"}],
+            "exam": [
+                {"item_id": "exact-row", "prompt": "Summarize the refund policy without changing eligibility dates."},
+                {"item_id": "behavioral-row", "expression": "is_connected and not is_bipartite"},
+                {"item_id": "review-row", "prompt": "Reset a locked customer password after identity verification."},
+                {"item_id": "clean-row", "prompt": "Calculate shipment tax for a declared destination."},
+            ],
+            "exposure": [
+                {"prompt": "Summarize the refund policy without changing eligibility dates.", "source": "declared-training.jsonl:7"},
+                {"expression": "not is_bipartite and is_connected", "source": "graph-sft.jsonl:19"},
+                {"prompt": "After identity verification, safely reset the locked customer password.", "source": "support-sft.jsonl:91"},
+            ],
+            "fingerprint_max_n": 4,
+            "similarity_threshold": 0.78,
         },
         "gate": {
             "baseline": {f"item-{index}": False for index in range(1, 8)},
             "candidate": {f"item-{index}": index <= 6 for index in range(1, 8)},
-            "domains": {f"item-{index}": "code" for index in range(1, 8)},
+            "domains": {f"item-{index}": "code" if index <= 4 else "support" for index in range(1, 8)},
             "baseline_name": "v1",
             "candidate_name": "v2",
             "policy": {"min_gains": 1, "max_regressions": 0, "confidence_alpha": 0.05},
@@ -787,7 +1371,7 @@ def examples() -> dict[str, Any]:
             "objective": "Who currently holds the obsidian key?",
             "objective_entities": ["obsidian_key"],
             "context_entities": ["comet", "harbor"],
-            "token_budget": 36,
+            "token_budget": 18,
             "memories": [
                 {"content": "URGENT: the crimson comet appeared over Harbor City.", "entities": ["comet", "harbor"], "confidence": 1.0},
                 {"content": "Mara hands the obsidian key to Ivo at the archive.", "entities": ["obsidian_key", "ivo"], "confidence": 0.9},

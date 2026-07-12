@@ -3,55 +3,82 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Stateless public tools built from Whetstone's verifier-grounded evaluation machinery.">
+  <meta name="description" content="Eight verifier-grounded evaluation tools you can run on disposable data, with item-level evidence and downloadable receipts.">
+  <meta name="theme-color" content="#10191f">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/styles.css?v=0.1.0.2">
-  <title>Whetstone Tools — verifier-grounded evaluation utilities</title>
+  <link rel="stylesheet" href="/styles.css?v=0.2.2">
+  <title>Whetstone Tools &mdash; evaluation evidence you can inspect</title>
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Whetstone Tools home">WHETSTONE<span>.</span></a>
     <nav aria-label="Primary navigation">
-      <a href="#tools">Tools</a>
-      <a href="#evidence">Evidence</a>
+      <a href="#tools">Workbench</a>
+      <a href="#evidence">Receipts</a>
+      <a href="#boundary">Boundary</a>
       <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">Core source</a>
     </nav>
-    <span class="live-chip"><i></i> stateless public instance</span>
+    <span class="live-chip"><i></i> live &middot; stateless &middot; private bank absent</span>
   </header>
 
   <main id="top">
     <section class="hero">
-      <p class="eyebrow">Evaluation infrastructure you can touch</p>
-      <h1>Eight small products.<br>One verifier core.</h1>
-      <p class="hero-copy">Audit declared eval exposure, compare model versions item by item, diagnose a bank, constrain a Markdown patch, hunt graph counterexamples, inspect memory relevance, and replay agent events—without loading Whetstone's private examiner bank.</p>
-      <div class="trust-row" aria-label="Service boundaries">
-        <span>No accounts</span><span>No cookies</span><span>No upload persistence</span><span>No private bank on server</span>
+      <div class="hero-main">
+        <p class="eyebrow">Evaluation infrastructure you can interrogate</p>
+        <h1>Stop asking whether it got better.</h1>
+        <p class="hero-declaration">Make it <em>prove</em> it.</p>
+        <p class="hero-copy">Eight focused tools turn model results, exposure records, memory traces, patches, and conjectures into inspectable evidence. Every verdict comes with the item-level path that produced it.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#tools">Open the workbench</a>
+          <a class="button ghost" href="#evidence">See measured receipts</a>
+        </div>
+      </div>
+
+      <aside class="hero-console" aria-label="Whetstone decision pipeline">
+        <div class="console-topline"><span>promotion.run</span><span class="console-live">LIVE</span></div>
+        <div class="console-row"><span class="console-index">01</span><b>EXPOSURE</b><span>quarantine before scoring</span><i class="signal pass"></i></div>
+        <div class="console-row"><span class="console-index">02</span><b>COHORT</b><span>prove paired item identity</span><i class="signal pass"></i></div>
+        <div class="console-row"><span class="console-index">03</span><b>REGRESSIONS</b><span>zero hidden tradeoffs</span><i class="signal pass"></i></div>
+        <div class="console-row"><span class="console-index">04</span><b>EXACT TEST</b><span>p = 0.031250</span><i class="signal pass"></i></div>
+        <div class="console-verdict"><span>DECISION</span><strong>PASS</strong></div>
+        <div class="console-hash">receipt sha256 &middot; 879f2a45d8&hellip;</div>
+      </aside>
+
+      <div class="trust-row" aria-label="Hosted service boundaries">
+        <span>No accounts</span><span>No cookies</span><span>No persistence</span><span>No private bank</span><span>Exact receipts</span>
       </div>
       <div class="warning">
-        <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. A real private exam belongs in the local CLI or a deployment you control.
+        <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. Private exams belong in the local CLI or a deployment inside your trust boundary.
       </div>
     </section>
 
     <section class="evidence" id="evidence" aria-labelledby="evidence-heading">
-      <div>
+      <div class="evidence-intro">
         <p class="eyebrow">Receipts, not slogans</p>
         <h2 id="evidence-heading">The mechanisms were measured before they were wrapped.</h2>
+        <p>These numbers are loaded from committed, sanitized experiment receipts. The public service never sees the private items behind them.</p>
       </div>
       <div class="evidence-grid" id="evidenceGrid" aria-live="polite">
-        <div class="metric"><b>—</b><span>loading receipt evidence</span></div>
+        <div class="metric"><b>&mdash;</b><span>loading receipt evidence</span></div>
       </div>
     </section>
 
     <section class="tools" id="tools" aria-labelledby="tools-heading">
-      <p class="eyebrow">Choose a surface</p>
-      <h2 id="tools-heading">Run a real mechanism on your own disposable data.</h2>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">The verifier workbench</p>
+          <h2 id="tools-heading">Run the mechanism. Inspect the proof.</h2>
+        </div>
+        <p>Every sample is disposable, editable, and verified by the same deterministic core exposed through the API.</p>
+      </div>
+
       <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Whetstone tools"></div>
 
       <div class="workbench">
         <section class="input-pane" aria-labelledby="activeTitle">
           <div class="pane-heading">
             <div>
-              <p class="tool-number" id="toolNumber">01</p>
+              <p class="tool-number" id="toolNumber">01 / 08</p>
               <h3 id="activeTitle">Whetstone Inspector</h3>
             </div>
             <span class="boundary-badge" id="boundaryBadge">exact inputs</span>
@@ -59,71 +86,91 @@
           <p class="tool-promise" id="activePromise"></p>
           <p class="tool-boundary" id="activeBoundary"></p>
 
-          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload JSON or JSONL files">
+          <div class="mechanism-steps" id="mechanismSteps" aria-label="Mechanism stages"></div>
+
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload JSON, JSONL, or Markdown files">
             <input id="fileInput" type="file" multiple hidden>
-            <strong>Drop files here</strong>
-            <span id="dropHint">or click to choose JSON / JSONL</span>
+            <span class="drop-icon" aria-hidden="true">+</span>
+            <span><strong>Drop your files</strong><small id="dropHint">or click to choose JSON / JSONL</small></span>
           </div>
           <div class="file-chips" id="fileChips" aria-live="polite"></div>
 
-          <label class="editor-label" for="payloadEditor">
-            Request payload
-            <span>JSON; editable before anything is sent</span>
-          </label>
-          <textarea id="payloadEditor" spellcheck="false" aria-describedby="editorHelp"></textarea>
+          <div class="payload-summary" id="payloadSummary" aria-live="polite"></div>
+
+          <details class="request-details" open>
+            <summary>Request payload <span>JSON &middot; editable before anything is sent</span></summary>
+            <label class="sr-only" for="payloadEditor">Request payload JSON</label>
+            <textarea id="payloadEditor" spellcheck="false" aria-describedby="editorHelp"></textarea>
+          </details>
           <p class="editor-help" id="editorHelp">Load the verified sample, replace it with sanitized data, then run.</p>
 
-          <div class="actions">
-            <button class="button secondary" id="sampleButton" type="button">Restore sample</button>
-            <button class="button primary" id="runButton" type="button">Run tool</button>
+          <div class="actions input-actions">
+            <button class="button ghost" id="sampleButton" type="button">Restore sample</button>
+            <button class="button primary run-button" id="runButton" type="button"><span>Run verification</span><i aria-hidden="true">&rarr;</i></button>
           </div>
         </section>
 
-        <section class="result-pane" aria-labelledby="resultHeading">
+        <section class="result-pane" aria-labelledby="resultHeading" aria-live="polite">
           <div class="result-topline">
             <div>
-              <p class="tool-number">RECEIPT</p>
-              <h3 id="resultHeading">Waiting for a run</h3>
+              <p class="tool-number">EVIDENCE RECEIPT</p>
+              <h3 id="resultHeading">Ready for a run</h3>
             </div>
             <span class="status idle" id="resultStatus">IDLE</span>
           </div>
+
+          <div class="run-progress" id="runProgress" hidden><i></i><span>Verifier running</span></div>
+
           <div class="result-empty" id="resultEmpty">
-            <div class="empty-mark">◇</div>
-            <p>The result will stay here while you inspect the item-level evidence and download the JSON receipt.</p>
+            <div class="empty-blueprint" id="emptyBlueprint"></div>
+            <p id="emptyMessage">Run the verified sample to see the complete decision path, not just a score.</p>
           </div>
+
           <div id="resultContent" hidden>
+            <div class="result-narrative" id="resultNarrative"></div>
+            <div class="result-viz" id="resultViz"></div>
             <div class="summary-grid" id="summaryGrid"></div>
             <div class="detail" id="resultDetail"></div>
             <details class="json-details">
-              <summary>Complete JSON receipt</summary>
+              <summary>Complete machine-readable receipt <span id="receiptHash"></span></summary>
               <pre id="resultJson"></pre>
             </details>
             <div class="actions result-actions">
-              <button class="button secondary" id="copyButton" type="button">Copy JSON</button>
-              <button class="button secondary" id="downloadButton" type="button">Download receipt</button>
+              <button class="button ghost" id="shareButton" type="button">Copy tool link</button>
+              <button class="button ghost" id="artifactButton" type="button" hidden>Download artifact</button>
+              <button class="button ghost" id="copyButton" type="button">Copy receipt</button>
+              <button class="button dark" id="downloadButton" type="button">Download receipt</button>
             </div>
           </div>
         </section>
       </div>
     </section>
 
-    <section class="local-callout">
+    <section class="boundary-section" id="boundary">
       <div>
-        <p class="eyebrow">The serious deployment</p>
-        <h2>Keep the exam where the model cannot see it.</h2>
-        <p>The hosted tools are stateless demonstrations. Whetstone's CLI, MCP server, ACP candidate adapter, and localhost service keep private items inside your trust boundary and emit the same audit-shaped decisions.</p>
+        <p class="eyebrow">A hard trust boundary</p>
+        <h2>The public demo cannot serve what it never loaded.</h2>
+        <p>The hosted process is stateless and has no examiner bank. For a real promotion decision, the CLI, MCP server, ACP candidate adapter, and localhost service keep private items inside your infrastructure.</p>
       </div>
-      <pre><code>whetstone gate --baseline v1 --candidate v2
-# exit 0 PASS · 2 HOLD · 3 BLOCK</code></pre>
+      <div class="boundary-diagram" aria-label="Private deployment data flow">
+        <div><span>YOUR BANK</span><b>private items</b></div>
+        <i>&rarr;</i>
+        <div><span>WHETSTONE</span><b>server-side grading</b></div>
+        <i>&rarr;</i>
+        <div><span>YOUR CI</span><b>receipt + exit code</b></div>
+      </div>
+      <pre><code>whetstone inspect --exam private.jsonl --exposure training.jsonl \
+  --baseline v1.json --candidate v2.json
+# 0 PASS &middot; 2 HOLD &middot; 3 BLOCK</code></pre>
     </section>
   </main>
 
   <footer>
-    <span>Whetstone Tools <b id="serviceVersion">v—</b></span>
-    <span>AGPL-3.0 · commercial licensing available</span>
-    <span id="serviceState">checking service boundary…</span>
+    <span>Whetstone Tools <b id="serviceVersion">v&mdash;</b></span>
+    <span>AGPL-3.0 &middot; commercial licensing available</span>
+    <span id="serviceState">checking service boundary&hellip;</span>
   </footer>
 
-  <script src="/app.js?v=0.1.0.2" defer></script>
+  <script src="/app.js?v=0.2.2" defer></script>
 </body>
 </html>

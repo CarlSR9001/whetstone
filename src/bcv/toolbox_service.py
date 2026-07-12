@@ -11,13 +11,14 @@ import argparse
 import json
 import mimetypes
 import secrets
-import threading
 import time
-from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from bcv.ephemeral import ensure_started, hatchery
+from bcv.mcp_service import handle_mcp
+from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
 from bcv.product_tools import (
     ProductInputError,
     audit_leakage,
@@ -33,37 +34,11 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STARTED_AT = time.time()
-
-
-class SlidingWindowLimit:
-    def __init__(self, requests: int, seconds: float) -> None:
-        self.requests = requests
-        self.seconds = seconds
-        self.lock = threading.Lock()
-        self.events: dict[str, deque[float]] = defaultdict(deque)
-
-    def allow(self, key: str) -> bool:
-        now = time.monotonic()
-        with self.lock:
-            queue = self.events[key]
-            while queue and queue[0] <= now - self.seconds:
-                queue.popleft()
-            if len(queue) >= self.requests:
-                return False
-            queue.append(now)
-            if len(self.events) > 10_000:
-                self.events = defaultdict(deque, {name: values for name, values in self.events.items() if values})
-            return True
-
-
-GENERAL_LIMIT = SlidingWindowLimit(60, 60)
-HUNTER_LIMIT = SlidingWindowLimit(4, 600)
-HUNTER_SLOT = threading.BoundedSemaphore(1)
 
 
 def _load_json(path: Path) -> dict:
@@ -171,6 +146,13 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 "private_bank_loaded": False,
                 "uptime_seconds": round(time.time() - STARTED_AT, 1),
                 "tools": len(catalog()),
+                "mcp_endpoint": "/mcp",
+                "report_card": hatchery().status(),
+            })
+        if path == "/mcp":
+            return self._json(405, {
+                "error": "the MCP endpoint is Streamable HTTP in stateless mode: POST a JSON-RPC 2.0 message",
+                "server_info": "whetstone-tools",
             })
         if path == "/api/catalog":
             return self._json(200, {"tools": catalog()})
@@ -185,7 +167,11 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 "# Whetstone Tools\n\n"
                 "Stateless public demonstrations of exposure auditing, paired promotion gates, bank health, "
                 "SafePatch conservation checks, bounded graph counterexample search, memory relevance scoring, "
-                "and agent event replay. No private examiner bank is loaded.\n"
+                "and agent event replay. No private examiner bank is loaded.\n\n"
+                "## MCP\n\n"
+                "Remote MCP endpoint (Streamable HTTP, stateless): POST JSON-RPC to /mcp. Tier 0 tools are "
+                "the stateless analyses above. Tier 1: report_card_start hands your agent a disposable "
+                "graph-repair exam; report_card_submit grades it by checker spec and destroys the session.\n"
             ).encode("utf-8")
             return self._bytes(200, body, "text/plain; charset=utf-8", cache="public, max-age=3600")
         static_name = "index.html" if path in {"/", "/index.html"} else path.lstrip("/")
@@ -221,6 +207,11 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return self._json(400, {"error": "body must be valid UTF-8 JSON", "request_id": request_id})
+        if path == "/mcp":
+            status, body = handle_mcp(payload, client_ip)
+            if body is None:
+                return self._bytes(status, b"", "application/json; charset=utf-8")
+            return self._json(status, body)
         if not isinstance(payload, dict):
             return self._json(400, {"error": "JSON body must be an object", "request_id": request_id})
 
@@ -256,6 +247,7 @@ def make_server(host: str = "127.0.0.1", port: int = 8988) -> ThreadingHTTPServe
 
 def serve(host: str = "127.0.0.1", port: int = 8988) -> None:
     server = make_server(host, port)
+    ensure_started()  # warm the report-card hatchery in the background
     print(f"Whetstone Tools {VERSION} on http://{host}:{port} (stateless; no private bank loaded)")
     try:
         server.serve_forever()

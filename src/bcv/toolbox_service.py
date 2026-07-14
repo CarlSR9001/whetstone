@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from bcv.ephemeral import ensure_started, hatchery
 from bcv.mcp_service import handle_mcp
 from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
+from bcv.stats import STATS
 from bcv.product_tools import (
     ProductInputError,
     audit_leakage,
@@ -34,7 +35,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -88,6 +89,18 @@ POST_ROUTES = {
     "/api/safepatch": safe_patch,
     "/api/memory": memory_relevance,
     "/api/replay": replay_trace,
+}
+
+# REST endpoints counted under their MCP tool names so /api/stats merges cleanly.
+REST_TOOL_NAMES = {
+    "/api/inspect": "inspect_promotion",
+    "/api/leakage": "audit_leakage",
+    "/api/gate": "promotion_gate",
+    "/api/health-report": "bank_health",
+    "/api/safepatch": "safe_patch",
+    "/api/memory": "memory_relevance",
+    "/api/replay": "replay_trace",
+    "/api/counterexample": "counterexample_hunt",
 }
 
 
@@ -156,6 +169,8 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             })
         if path == "/api/catalog":
             return self._json(200, {"tools": catalog()})
+        if path == "/api/stats":
+            return self._json(200, STATS.public_summary())
         if path == "/api/examples":
             return self._json(200, examples())
         if path == "/api/evidence":
@@ -213,24 +228,32 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         request_id = secrets.token_hex(6)
         path = self.path.split("?", 1)[0]
         client_ip = self._client_ip()
+        STATS.touch(client_ip)
         if not self._same_origin():
+            STATS.bump("refused.cross_origin")
             return self._json(403, {"error": "cross-origin request refused", "request_id": request_id})
         if not GENERAL_LIMIT.allow(client_ip):
+            STATS.bump("refused.rate_limited")
             return self._json(429, {"error": "rate limit exceeded", "request_id": request_id})
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         if content_type != "application/json":
+            STATS.bump("refused.bad_request")
             return self._json(415, {"error": "Content-Type must be application/json", "request_id": request_id})
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
+            STATS.bump("refused.bad_request")
             return self._json(400, {"error": "invalid Content-Length", "request_id": request_id})
         if length <= 0:
+            STATS.bump("refused.bad_request")
             return self._json(400, {"error": "JSON body required", "request_id": request_id})
         if length > MAX_BODY_BYTES:
+            STATS.bump("refused.oversized")
             return self._json(413, {"error": f"body exceeds {MAX_BODY_BYTES} bytes", "request_id": request_id})
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
+            STATS.bump("refused.bad_request")
             return self._json(400, {"error": "body must be valid UTF-8 JSON", "request_id": request_id})
         if path == "/mcp":
             status, body = handle_mcp(payload, client_ip)
@@ -238,27 +261,35 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 return self._bytes(status, b"", "application/json; charset=utf-8")
             return self._json(status, body)
         if not isinstance(payload, dict):
+            STATS.bump("refused.bad_request")
             return self._json(400, {"error": "JSON body must be an object", "request_id": request_id})
 
+        tool_name = REST_TOOL_NAMES.get(path, "")
         acquired = False
         try:
             if path == "/api/counterexample":
                 if not HUNTER_LIMIT.allow(client_ip):
+                    STATS.tool_call(tool_name, "rest", "limited")
                     return self._json(429, {"error": "counterexample search limit exceeded", "request_id": request_id})
                 acquired = HUNTER_SLOT.acquire(blocking=False)
                 if not acquired:
+                    STATS.tool_call(tool_name, "rest", "limited")
                     return self._json(429, {"error": "counterexample worker busy; retry shortly", "request_id": request_id})
                 result = hunt_counterexample(payload)
             else:
                 handler = POST_ROUTES.get(path)
                 if handler is None:
+                    STATS.bump("refused.unknown_endpoint")
                     return self._json(404, {"error": "unknown endpoint", "request_id": request_id})
                 result = handler(payload)
             result["request_id"] = request_id
+            STATS.tool_call(tool_name, "rest", "ok")
             return self._json(200, result)
         except ProductInputError as error:
+            STATS.tool_call(tool_name, "rest", "input_error")
             return self._json(400, {"error": str(error), "request_id": request_id})
         except Exception as error:  # fail closed without reflecting internals
+            STATS.tool_call(tool_name, "rest", "internal_error")
             print(f"toolbox request {request_id} failed: {type(error).__name__}", flush=True)
             return self._json(500, {"error": "internal processing error", "request_id": request_id})
         finally:
@@ -273,6 +304,7 @@ def make_server(host: str = "127.0.0.1", port: int = 8988) -> ThreadingHTTPServe
 def serve(host: str = "127.0.0.1", port: int = 8988) -> None:
     server = make_server(host, port)
     ensure_started()  # warm the report-card hatchery in the background
+    STATS.start_flusher()
     print(f"Whetstone Tools {VERSION} on http://{host}:{port} (stateless; no private bank loaded)")
     try:
         server.serve_forever()
@@ -280,6 +312,7 @@ def serve(host: str = "127.0.0.1", port: int = 8988) -> None:
         pass
     finally:
         server.server_close()
+        STATS.flush()
 
 
 def main() -> None:

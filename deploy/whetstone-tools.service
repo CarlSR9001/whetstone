@@ -12,6 +12,10 @@ WorkingDirectory=/opt/whetstone-tools/current
 Environment=PYTHONPATH=/opt/whetstone-tools/current/src
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
+# Aggregate metrics (salted-hash clients, counters only) are the one sanctioned
+# write; StateDirectory is the only writable path under ProtectSystem=strict.
+StateDirectory=whetstone-tools
+Environment=WHETSTONE_STATE_DIR=/var/lib/whetstone-tools
 ExecStart=/usr/bin/python3 -m bcv.toolbox_service --host 127.0.0.1 --port 8988
 Restart=on-failure
 RestartSec=3

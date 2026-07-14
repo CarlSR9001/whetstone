@@ -26,6 +26,7 @@ import threading
 import time
 
 from bcv.ratelimit import GRADE_SLOT, REPORT_START_LIMIT, REPORT_SUBMIT_LIMIT
+from bcv.stats import STATS
 
 
 class TierError(ValueError):
@@ -137,8 +138,10 @@ class Hatchery:
             if self.error:
                 raise TierError("report cards are unavailable: warm-up failed; the operator has been notified")
             if not self.ready:
+                STATS.bump("report_card.refused_warming")
                 raise TierError("the exam hatchery is still warming up; retry in about a minute", retryable=True)
         if not REPORT_START_LIMIT.allow(client_ip):
+            STATS.bump("report_card.refused_limit")
             raise TierError("report-card session limit reached for this address; try again later")
         now = time.time()
         with self.lock:
@@ -173,6 +176,7 @@ class Hatchery:
                 "expires_at": now + self.session_ttl,
                 "client_ip": client_ip,
             }
+        STATS.bump("report_card.sessions")
         return {
             "session_id": session_id,
             "expires_in_seconds": int(self.session_ttl),
@@ -265,6 +269,11 @@ class Hatchery:
         total = len(graded)
         passed = sum(1 for row in graded if row["passed"])
         median_retention = sorted(retentions)[len(retentions) // 2] if retentions else None
+        STATS.bump("report_card.graded")
+        STATS.bump("report_card.items_graded", total)
+        STATS.bump("report_card.items_passed", passed)
+        for retention in retentions:
+            STATS.retention_bucket(retention)
         item_ids = sorted(session["items"])
         answer_blob = json.dumps({key: answers.get(key) for key in item_ids}, sort_keys=True, default=str)
         return {

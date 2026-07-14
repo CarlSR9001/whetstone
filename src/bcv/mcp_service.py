@@ -33,6 +33,7 @@ from bcv.product_tools import (
     safe_patch,
 )
 from bcv.ratelimit import HUNTER_LIMIT, HUNTER_SLOT
+from bcv.stats import STATS
 
 SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "whetstone-tools", "version": "0.3.0"}
@@ -206,8 +207,10 @@ def _tool_failure(request_id: Any, message: str) -> dict:
 def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
     """Dispatch one JSON-RPC message. Returns (http_status, body_or_None)."""
     if isinstance(payload, list):
+        STATS.bump("refused.jsonrpc_batch")
         return 400, _rpc_error(None, -32600, "JSON-RPC batching is not supported; send one message per request")
     if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":
+        STATS.bump("refused.bad_jsonrpc")
         return 400, _rpc_error(None, -32600, "body must be a JSON-RPC 2.0 message")
 
     method = payload.get("method")
@@ -221,6 +224,7 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         return 202, None
 
     if method == "initialize":
+        STATS.bump("mcp.initialize")
         requested = str(params.get("protocolVersion", ""))
         version = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else SUPPORTED_PROTOCOL_VERSIONS[0]
         return 200, _rpc_result(request_id, {
@@ -237,6 +241,7 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         name = params.get("name")
         entry = TOOLS.get(name) if isinstance(name, str) else None
         if entry is None:
+            STATS.bump("refused.unknown_tool")
             return 200, _rpc_error(request_id, -32602, f"unknown tool {name!r}")
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
@@ -245,13 +250,17 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         try:
             result = handler(arguments, client_ip)
         except (ProductInputError, TierError) as error:
+            STATS.tool_call(name, "mcp", "input_error")
             return 200, _tool_failure(request_id, str(error))
         except Exception as error:  # fail closed without reflecting internals
+            STATS.tool_call(name, "mcp", "internal_error")
             print(f"mcp tool {name} failed: {type(error).__name__}", flush=True)
             return 200, _tool_failure(request_id, "internal processing error")
+        STATS.tool_call(name, "mcp", "ok")
         return 200, _rpc_result(request_id, {
             "content": [{"type": "text", "text": json.dumps(result, sort_keys=True, indent=1)}],
             "structuredContent": result,
             "isError": False,
         })
+    STATS.bump("refused.unknown_method")
     return 200, _rpc_error(request_id, -32601, f"method {method!r} not found")

@@ -14,7 +14,6 @@ import secrets
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from bcv.ephemeral import ensure_started, hatchery
 from bcv.mcp_service import handle_mcp
@@ -35,7 +34,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.3.2"
+VERSION = "0.4.0"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -115,10 +114,30 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         forwarded = self.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip()
         return forwarded or self.client_address[0]
 
+    def _cors(self) -> None:
+        """Public, unauthenticated, stateless API: no cookies, no sessions, no
+        user state to forge a request against. Allowing any origin costs nothing
+        and is the only way browser clients and hosted MCP clients (claude.ai
+        connectors send Origin) can reach the endpoint at all. Credentials are
+        never allowed, so '*' stays safe."""
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id",
+        )
+        self.send_header("Access-Control-Max-Age", "86400")
+
+    def _is_machine_path(self) -> bool:
+        path = self.path.split("?", 1)[0]
+        return path == "/mcp" or path.startswith("/api/")
+
     def _headers(self, content_type: str, length: int, *, cache: str = "no-store") -> None:
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", cache)
+        if self._is_machine_path():
+            self._cors()
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -140,14 +159,16 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self._bytes(code, body, "application/json; charset=utf-8")
 
-    def _same_origin(self) -> bool:
-        origin = self.headers.get("Origin")
-        if not origin:
-            return True
-        try:
-            return urlsplit(origin).netloc.lower() == self.headers.get("Host", "").lower()
-        except ValueError:
-            return False
+    def do_OPTIONS(self) -> None:
+        if self._is_machine_path():
+            self.send_response(204)
+            self._cors()
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(405)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -229,16 +250,13 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         client_ip = self._client_ip()
         STATS.touch(client_ip)
-        if not self._same_origin():
-            STATS.bump("refused.cross_origin")
-            return self._json(403, {"error": "cross-origin request refused", "request_id": request_id})
         if not GENERAL_LIMIT.allow(client_ip):
             STATS.bump("refused.rate_limited")
             return self._json(429, {"error": "rate limit exceeded", "request_id": request_id})
-        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-        if content_type != "application/json":
-            STATS.bump("refused.bad_request")
-            return self._json(415, {"error": "Content-Type must be application/json", "request_id": request_id})
+        # Deliberately lenient about Content-Type: `curl -X POST url -d '{...}'`
+        # is the first thing anyone types, and curl defaults to form-urlencoded.
+        # The body either parses as JSON or it does not; the declared type adds
+        # nothing on an API with no cookies to protect.
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -254,7 +272,11 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             STATS.bump("refused.bad_request")
-            return self._json(400, {"error": "body must be valid UTF-8 JSON", "request_id": request_id})
+            return self._json(400, {
+                "error": "body must be valid UTF-8 JSON",
+                "hint": "GET /api/examples returns a complete valid payload for every tool",
+                "request_id": request_id,
+            })
         if path == "/mcp":
             status, body = handle_mcp(payload, client_ip)
             if body is None:

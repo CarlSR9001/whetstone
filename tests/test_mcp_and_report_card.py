@@ -298,6 +298,21 @@ def test_discovery_surfaces(toolbox_url):
     assert head.read() == b""
 
 
+def test_registry_auth_proof_served_from_state_dir(toolbox_url, tmp_path, monkeypatch):
+    # Without a state dir: 404.
+    monkeypatch.delenv("WHETSTONE_STATE_DIR", raising=False)
+    try:
+        urllib.request.urlopen(toolbox_url + "/.well-known/mcp-registry-auth", timeout=5)
+        raise AssertionError("expected 404")
+    except urllib.error.HTTPError as error:
+        assert error.code == 404
+    # With the proof file present: served verbatim.
+    (tmp_path / "mcp-registry-auth").write_text("v=MCPv1; k=ed25519; p=TESTKEY\n", encoding="utf-8")
+    monkeypatch.setenv("WHETSTONE_STATE_DIR", str(tmp_path))
+    body = urllib.request.urlopen(toolbox_url + "/.well-known/mcp-registry-auth", timeout=5).read().decode("utf-8")
+    assert body.startswith("v=MCPv1; k=ed25519;")
+
+
 def test_index_has_structured_data_and_faq(toolbox_url):
     html = urllib.request.urlopen(toolbox_url + "/", timeout=5).read().decode("utf-8")
     assert 'application/ld+json' in html

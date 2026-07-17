@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import secrets
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -34,7 +35,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 CANONICAL = "https://whetstone.cyberelf.link"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
@@ -316,6 +317,16 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         if path == "/openapi.json":
             body = json.dumps(_openapi_spec(), sort_keys=True, indent=1).encode("utf-8")
             return self._bytes(200, body, "application/json; charset=utf-8", cache="public, max-age=3600")
+        if path == "/.well-known/mcp-registry-auth":
+            # Domain-ownership proof for the official MCP Registry. The record
+            # (a public key) lives in the state dir, not the repo, so rotating
+            # it never requires a release.
+            raw = os.environ.get("WHETSTONE_STATE_DIR") or os.environ.get("STATE_DIRECTORY") or ""
+            raw = raw.split(os.pathsep, 1)[0]  # systemd may pass colon-separated dirs; os.pathsep spares Windows drive letters
+            proof = Path(raw) / "mcp-registry-auth" if raw else None
+            if proof is not None and proof.exists():
+                return self._bytes(200, proof.read_bytes(), "text/plain; charset=utf-8", cache="public, max-age=300")
+            return self._json(404, {"error": "not found"})
         if path in {"/.well-known/mcp.json", "/mcp.json"}:
             body = json.dumps(_mcp_manifest(), sort_keys=True, indent=1).encode("utf-8")
             return self._bytes(200, body, "application/json; charset=utf-8", cache="public, max-age=3600")

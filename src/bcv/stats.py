@@ -37,7 +37,7 @@ def _state_dir() -> Path | None:
     raw = os.environ.get("WHETSTONE_STATE_DIR") or os.environ.get("STATE_DIRECTORY")
     if not raw:
         return None
-    path = Path(raw.split(":", 1)[0])
+    path = Path(raw.split(os.pathsep, 1)[0])  # systemd may pass colon-separated dirs; os.pathsep spares Windows drive letters
     return path if path.is_dir() else None
 
 

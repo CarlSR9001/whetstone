@@ -263,6 +263,43 @@ def test_agent_docs_are_served(toolbox_url):
         assert error.code == 404
 
 
+def test_discovery_surfaces(toolbox_url):
+    robots = urllib.request.urlopen(toolbox_url + "/robots.txt", timeout=5).read().decode("utf-8")
+    assert "Sitemap:" in robots and "/sitemap.xml" in robots
+
+    sitemap = urllib.request.urlopen(toolbox_url + "/sitemap.xml", timeout=5)
+    assert sitemap.headers["Content-Type"].startswith("application/xml")
+    body = sitemap.read().decode("utf-8")
+    assert "<urlset" in body and "/for-agents" in body and "/skill.md" in body
+
+    spec = json.loads(urllib.request.urlopen(toolbox_url + "/openapi.json", timeout=5).read())
+    assert spec["openapi"].startswith("3.1")
+    assert "/api/gate" in spec["paths"] and "/mcp" in spec["paths"]
+    assert spec["paths"]["/api/gate"]["post"]["requestBody"]["content"]["application/json"]["example"]
+
+    for manifest_path in ("/.well-known/mcp.json", "/mcp.json"):
+        manifest = json.loads(urllib.request.urlopen(toolbox_url + manifest_path, timeout=5).read())
+        assert manifest["transport"] == "streamable-http"
+        assert manifest["endpoint"].endswith("/mcp")
+        assert manifest["authentication"] == {"type": "none"}
+
+    full = urllib.request.urlopen(toolbox_url + "/llms-full.txt", timeout=5).read().decode("utf-8")
+    assert "## Tiers" in full and "name: whetstone-tools" in full  # index + embedded skill.md
+
+    og = urllib.request.urlopen(toolbox_url + "/og.png", timeout=5)
+    assert og.headers["Content-Type"] == "image/png"
+    assert og.read(8) == b"\x89PNG\r\n\x1a\n"
+
+
+def test_index_has_structured_data_and_faq(toolbox_url):
+    html = urllib.request.urlopen(toolbox_url + "/", timeout=5).read().decode("utf-8")
+    assert 'application/ld+json' in html
+    assert '"@type": "FAQPage"' in html and '"@type": "SoftwareApplication"' in html
+    assert 'property="og:image"' in html and "og.png" in html
+    assert "Frequently asked questions" in html
+    assert 'rel="canonical"' in html
+
+
 def test_http_get_mcp_is_405_with_guidance(toolbox_url):
     request = urllib.request.Request(toolbox_url + "/mcp", method="GET")
     try:

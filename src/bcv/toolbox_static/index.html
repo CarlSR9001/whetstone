@@ -3,11 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Eight verifier-grounded evaluation tools you can run on disposable data, with item-level evidence and downloadable receipts.">
+  <meta name="description" content="Whetstone is a promotion gate for AI agents: leakage and contamination audits, PASS/HOLD/BLOCK release verdicts with exact statistics, and a live MCP endpoint any agent can connect to. Stateless, free to try, AGPL source.">
   <meta name="theme-color" content="#10191f">
   <link rel="icon" href="data:,">
+  <link rel="canonical" href="https://whetstone.cyberelf.link/">
   <link rel="stylesheet" href="/styles.css?v=0.2.2">
-  <title>Whetstone Tools &mdash; evaluation evidence you can inspect</title>
+  <title>Whetstone &mdash; AI agent evaluation gate: leakage audits, promotion verdicts, live MCP server</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Whetstone">
+  <meta property="og:title" content="Whetstone — the promotion gate for AI agents">
+  <meta property="og:description" content="Stop asking whether your agent got better. Make it prove it: exposure quarantine, paired verdicts with exact statistics, and a live MCP endpoint that grades agents on exams they provably never trained on.">
+  <meta property="og:url" content="https://whetstone.cyberelf.link/">
+  <meta property="og:image" content="https://whetstone.cyberelf.link/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Whetstone — the promotion gate for AI agents">
+  <meta name="twitter:description" content="Leakage audits, PASS/HOLD/BLOCK release verdicts, and a live MCP endpoint any agent can connect to. No signup, nothing stored.">
+  <meta name="twitter:image" content="https://whetstone.cyberelf.link/og.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "Whetstone",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "url": "https://whetstone.cyberelf.link/",
+        "description": "A promotion gate for AI agents: verifier-backed evaluation with exposure quarantine, exact paired statistics, PASS/HOLD/BLOCK verdicts, and a live MCP endpoint for agent access.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "softwareHelp": "https://whetstone.cyberelf.link/for-agents",
+        "sameAs": ["https://github.com/CarlSR9001/whetstone"]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Whetstone?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Whetstone is a promotion gate for AI agents. It decides whether a new agent or model version genuinely improved by grading it against verifier-backed exams the system under test provably never trained on, and returns PASS, HOLD, or BLOCK with exact statistics and auditable receipts." }
+          },
+          {
+            "@type": "Question",
+            "name": "How is Whetstone different from eval dashboards and observability tools?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Observability tools show what happened; Whetstone issues a release decision. Its exam items are structurally withheld from the system under exam, checked for contamination against actual training artifacts, and retired when they saturate. Every verdict ships with an item-level decision path and SHA-256 commitments." }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I connect an AI agent to Whetstone?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Point any MCP client at https://whetstone.cyberelf.link/mcp (Streamable HTTP, no auth): claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp. Or POST JSON to the REST endpoints under /api/ — GET /api/examples returns a complete working payload for every tool." }
+          },
+          {
+            "@type": "Question",
+            "name": "Can Whetstone grade my agent right now?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Over MCP, call report_card_start to receive a disposable six-item graph-repair exam, answer it, and submit once with report_card_submit. Grading is by checker spec — any verified strict refinement passes, no answer key exists — and the session is destroyed after grading." }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Whetstone store my data?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. The public service is stateless: no accounts, no cookies, no stored request bodies, and no private exam bank is loaded in the hosted process. Only aggregate usage counters are kept." }
+          },
+          {
+            "@type": "Question",
+            "name": "What does Whetstone cost?",
+            "acceptedAnswer": { "@type": "Answer", "text": "The public demo is free with no signup. The core is open source under AGPL-3.0 on GitHub; commercial licensing and design-partner pilots are available from the author." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <header class="topbar">
@@ -163,6 +232,39 @@
       <pre><code>whetstone inspect --exam private.jsonl --exposure training.jsonl \
   --baseline v1.json --candidate v2.json
 # 0 PASS &middot; 2 HOLD &middot; 3 BLOCK</code></pre>
+    </section>
+
+    <section class="boundary-section" id="faq" aria-labelledby="faq-heading" style="display:block">
+      <div style="max-width:860px">
+        <p class="eyebrow">Plain answers</p>
+        <h2 id="faq-heading">Frequently asked questions</h2>
+        <div style="margin-top:18px">
+          <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0" open>
+            <summary style="cursor:pointer;font-weight:700">What is Whetstone?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">Whetstone is a promotion gate for AI agents. It decides whether a new agent or model version genuinely improved by grading it against verifier-backed exams the system under test provably never trained on, and returns PASS, HOLD, or BLOCK with exact statistics and auditable receipts.</p>
+          </details>
+          <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
+            <summary style="cursor:pointer;font-weight:700">How is this different from eval dashboards and observability tools?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">Observability tools show what happened; Whetstone issues a release decision. Its exam items are structurally withheld from the system under exam, checked for contamination against actual training artifacts, and retired when they saturate. Every verdict ships with an item-level decision path and SHA-256 commitments.</p>
+          </details>
+          <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
+            <summary style="cursor:pointer;font-weight:700">How do I connect an AI agent?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">Point any MCP client at <code>https://whetstone.cyberelf.link/mcp</code> (Streamable HTTP, no auth): <code>claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp</code>. Or POST JSON to the REST endpoints under <code>/api/</code> &mdash; <a href="/api/examples"><code>GET /api/examples</code></a> returns a complete working payload for every tool. Full agent documentation: <a href="/for-agents">/for-agents</a>.</p>
+          </details>
+          <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
+            <summary style="cursor:pointer;font-weight:700">Can Whetstone grade my agent right now?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">Yes. Over MCP, call <code>report_card_start</code> to receive a disposable six-item graph-repair exam, answer it, and submit once with <code>report_card_submit</code>. Grading is by checker spec &mdash; any verified strict refinement passes, no answer key exists &mdash; and the session is destroyed after grading.</p>
+          </details>
+          <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
+            <summary style="cursor:pointer;font-weight:700">Do you store my data?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">No. The public service is stateless: no accounts, no cookies, no stored request bodies, and no private exam bank is loaded in the hosted process. Only aggregate usage counters are kept.</p>
+          </details>
+          <details style="padding:14px 0">
+            <summary style="cursor:pointer;font-weight:700">What does it cost?</summary>
+            <p style="margin:10px 0 0;color:var(--muted)">The public demo is free with no signup. The core is open source under <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">AGPL-3.0 on GitHub</a>; commercial licensing and design-partner pilots are available from the author.</p>
+          </details>
+        </div>
+      </div>
     </section>
   </main>
 

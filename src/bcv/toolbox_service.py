@@ -34,7 +34,8 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
+CANONICAL = "https://whetstone.cyberelf.link"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +78,112 @@ def evidence() -> dict:
             "scope": redteam.get("note"),
         },
         "source": "sanitized committed receipts; no private item content",
+    }
+
+
+def _llms_body() -> str:
+    return (
+        "# Whetstone Tools\n\n"
+        "> Verifier-grounded evaluation tools for AI systems, callable by agents over MCP or REST. "
+        "Stateless, no auth, nothing stored, no private exam bank loaded.\n\n"
+        "Whetstone decides whether a new agent/model version genuinely improved: exposure quarantine, "
+        "paired promotion gates (PASS/HOLD/BLOCK with an exact McNemar test), leakage audits, bank "
+        "health, SafePatch conservation edits, graph counterexample search, memory relevance scoring, "
+        "and agent event replay.\n\n"
+        "## Use it\n\n"
+        f"- MCP endpoint (Streamable HTTP, stateless JSON-RPC): POST {CANONICAL}/mcp\n"
+        f"- Claude Code: claude mcp add --transport http whetstone {CANONICAL}/mcp\n"
+        "- REST: every tool is POST /api/<name>; GET /api/examples returns a complete valid payload per tool\n"
+        f"- OpenAPI spec: {CANONICAL}/openapi.json\n"
+        f"- Skill file (Anthropic Skills format, full instructions): {CANONICAL}/skill.md\n"
+        f"- Agent documentation page: {CANONICAL}/for-agents\n"
+        f"- Tool catalog: {CANONICAL}/api/catalog\n"
+        "- Source (AGPL-3.0): https://github.com/CarlSR9001/whetstone\n\n"
+        "## Tiers\n\n"
+        "- Tier 0 (stateless): you supply exam rows, paired results, documents, or event logs; you get "
+        "audits, verdicts, patches, or counterexamples with SHA-256 receipts. Tools: inspect_promotion, "
+        "audit_leakage, promotion_gate, bank_health, safe_patch, counterexample_hunt, memory_relevance, "
+        "replay_trace.\n"
+        "- Tier 1 (report card): report_card_start hands your agent a disposable 6-item graph-repair "
+        "exam; report_card_submit grades it by checker spec (any verified strict refinement passes; no "
+        "answer key exists), reports support-retention diagnostics, and destroys the one-shot session. "
+        "Items are minted from the public frontier: a demonstration, not a credential.\n\n"
+        "## Limits\n\n"
+        "~60 req/min general; 4 report-card sessions + 8 submits per hour per address; counterexample "
+        "hunts 4 per 10 min behind one worker; report card warms ~2 min after restart (GET /api/health "
+        "-> report_card.ready).\n"
+    )
+
+
+def _sitemap_xml() -> str:
+    pages = ("/", "/for-agents", "/skill.md", "/llms.txt", "/llms-full.txt", "/openapi.json")
+    entries = "\n".join(f"  <url><loc>{CANONICAL}{page}</loc></url>" for page in pages)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}\n</urlset>\n"
+    )
+
+
+def _mcp_manifest() -> dict:
+    return {
+        "name": "whetstone-tools",
+        "version": VERSION,
+        "description": (
+            "Promotion gate for AI agents: leakage audits, PASS/HOLD/BLOCK verdicts with exact "
+            "statistics, and a disposable report card that grades the connecting agent by checker spec."
+        ),
+        "endpoint": f"{CANONICAL}/mcp",
+        "transport": "streamable-http",
+        "protocol_versions": ["2025-06-18", "2025-03-26", "2024-11-05"],
+        "authentication": {"type": "none"},
+        "capabilities": {"tools": True, "resources": False, "prompts": False},
+        "documentation": f"{CANONICAL}/for-agents",
+        "skill_file": f"{CANONICAL}/skill.md",
+        "openapi": f"{CANONICAL}/openapi.json",
+        "source": "https://github.com/CarlSR9001/whetstone",
+        "license": "AGPL-3.0-or-later",
+    }
+
+
+def _openapi_spec() -> dict:
+    example_payloads = examples()
+    paths: dict = {
+        "/api/health": {"get": {"operationId": "health", "summary": "Service health, version, and report-card readiness.", "responses": {"200": {"description": "OK"}}}},
+        "/api/catalog": {"get": {"operationId": "listTools", "summary": "Catalog of the eight stateless verifier tools.", "responses": {"200": {"description": "OK"}}}},
+        "/api/examples": {"get": {"operationId": "getExamples", "summary": "A complete, valid request payload for every tool.", "responses": {"200": {"description": "OK"}}}},
+        "/api/stats": {"get": {"operationId": "getStats", "summary": "Aggregate, privacy-preserving usage counters.", "responses": {"200": {"description": "OK"}}}},
+        "/mcp": {"post": {"operationId": "mcp", "summary": "MCP endpoint (Streamable HTTP, stateless JSON-RPC 2.0). Tools include the Tier 0 set plus report_card_start / report_card_submit.", "responses": {"200": {"description": "JSON-RPC response"}}}},
+    }
+    for tool in catalog():
+        example = example_payloads.get(tool["id"])
+        operation = {
+            "operationId": tool["id"],
+            "summary": tool["promise"],
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": ({"example": example} if example else {})},
+            },
+            "responses": {
+                "200": {"description": "Deterministic receipt with item-level decision path and SHA-256 hashes."},
+                "400": {"description": "Input error (a hint points at /api/examples)."},
+                "429": {"description": "Rate limited."},
+            },
+        }
+        paths[tool["endpoint"]] = {"post": operation}
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Whetstone Tools",
+            "version": VERSION,
+            "description": (
+                "Verifier-grounded evaluation tools for AI systems. Stateless, unauthenticated, "
+                "nothing stored. Every POST tool is also exposed as an MCP tool at /mcp."
+            ),
+            "license": {"name": "AGPL-3.0-or-later", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
+        },
+        "servers": [{"url": CANONICAL}],
+        "paths": paths,
     }
 
 
@@ -145,7 +252,7 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
             "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
 
@@ -197,43 +304,27 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         if path == "/api/evidence":
             return self._json(200, evidence())
         if path == "/robots.txt":
-            return self._bytes(200, b"User-agent: *\nAllow: /\n", "text/plain; charset=utf-8", cache="public, max-age=3600")
+            body = f"User-agent: *\nAllow: /\n\nSitemap: {CANONICAL}/sitemap.xml\n".encode("utf-8")
+            return self._bytes(200, body, "text/plain; charset=utf-8", cache="public, max-age=3600")
+        if path == "/sitemap.xml":
+            return self._bytes(200, _sitemap_xml().encode("utf-8"), "application/xml; charset=utf-8", cache="public, max-age=3600")
+        if path == "/openapi.json":
+            body = json.dumps(_openapi_spec(), sort_keys=True, indent=1).encode("utf-8")
+            return self._bytes(200, body, "application/json; charset=utf-8", cache="public, max-age=3600")
+        if path in {"/.well-known/mcp.json", "/mcp.json"}:
+            body = json.dumps(_mcp_manifest(), sort_keys=True, indent=1).encode("utf-8")
+            return self._bytes(200, body, "application/json; charset=utf-8", cache="public, max-age=3600")
         if path == "/llms.txt":
-            body = (
-                "# Whetstone Tools\n\n"
-                "> Verifier-grounded evaluation tools for AI systems, callable by agents over MCP or REST. "
-                "Stateless, no auth, nothing stored, no private exam bank loaded.\n\n"
-                "Whetstone decides whether a new agent/model version genuinely improved: exposure quarantine, "
-                "paired promotion gates (PASS/HOLD/BLOCK with an exact McNemar test), leakage audits, bank "
-                "health, SafePatch conservation edits, graph counterexample search, memory relevance scoring, "
-                "and agent event replay.\n\n"
-                "## Use it\n\n"
-                "- MCP endpoint (Streamable HTTP, stateless JSON-RPC): POST https://whetstone.cyberelf.link/mcp\n"
-                "- Claude Code: claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp\n"
-                "- REST: every tool is POST /api/<name>; GET /api/examples returns a complete valid payload per tool\n"
-                "- Skill file (Anthropic Skills format, full instructions): https://whetstone.cyberelf.link/skill.md\n"
-                "- Agent documentation page: https://whetstone.cyberelf.link/for-agents\n"
-                "- Tool catalog: https://whetstone.cyberelf.link/api/catalog\n"
-                "- Source (AGPL-3.0): https://github.com/CarlSR9001/whetstone\n\n"
-                "## Tiers\n\n"
-                "- Tier 0 (stateless): you supply exam rows, paired results, documents, or event logs; you get "
-                "audits, verdicts, patches, or counterexamples with SHA-256 receipts. Tools: inspect_promotion, "
-                "audit_leakage, promotion_gate, bank_health, safe_patch, counterexample_hunt, memory_relevance, "
-                "replay_trace.\n"
-                "- Tier 1 (report card): report_card_start hands your agent a disposable 6-item graph-repair "
-                "exam; report_card_submit grades it by checker spec (any verified strict refinement passes; no "
-                "answer key exists), reports support-retention diagnostics, and destroys the one-shot session. "
-                "Items are minted from the public frontier: a demonstration, not a credential.\n\n"
-                "## Limits\n\n"
-                "~60 req/min general; 4 report-card sessions + 8 submits per hour per address; counterexample "
-                "hunts 4 per 10 min behind one worker; report card warms ~2 min after restart (GET /api/health "
-                "-> report_card.ready).\n"
-            ).encode("utf-8")
+            return self._bytes(200, _llms_body().encode("utf-8"), "text/plain; charset=utf-8", cache="public, max-age=3600")
+        if path == "/llms-full.txt":
+            skill_path = STATIC_ROOT / "skill.md"
+            skill = skill_path.read_text(encoding="utf-8") if skill_path.exists() else ""
+            body = (_llms_body() + "\n---\n\n" + skill).encode("utf-8")
             return self._bytes(200, body, "text/plain; charset=utf-8", cache="public, max-age=3600")
         static_name = "index.html" if path in {"/", "/index.html"} else path.lstrip("/")
         if static_name == "for-agents":
             static_name = "for-agents.html"
-        if static_name not in {"index.html", "app.js", "styles.css", "skill.md", "for-agents.html"}:
+        if static_name not in {"index.html", "app.js", "styles.css", "skill.md", "for-agents.html", "og.png"}:
             return self._json(404, {"error": "not found"})
         file_path = STATIC_ROOT / static_name
         if not file_path.exists():
@@ -242,8 +333,10 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             mime = "text/markdown"
         else:
             mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+        if not mime.startswith("image/"):
+            mime = f"{mime}; charset=utf-8"
         cache = "no-store" if static_name == "index.html" else "public, max-age=300"
-        return self._bytes(200, file_path.read_bytes(), f"{mime}; charset=utf-8", cache=cache)
+        return self._bytes(200, file_path.read_bytes(), mime, cache=cache)
 
     def do_POST(self) -> None:
         request_id = secrets.token_hex(6)

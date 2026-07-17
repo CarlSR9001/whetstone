@@ -290,6 +290,13 @@ def test_discovery_surfaces(toolbox_url):
     assert og.headers["Content-Type"] == "image/png"
     assert og.read(8) == b"\x89PNG\r\n\x1a\n"
 
+    # Link-preview bots probe with HEAD first: same headers, empty body.
+    head = urllib.request.urlopen(urllib.request.Request(toolbox_url + "/og.png", method="HEAD"), timeout=5)
+    assert head.status == 200
+    assert head.headers["Content-Type"] == "image/png"
+    assert int(head.headers["Content-Length"]) > 1000
+    assert head.read() == b""
+
 
 def test_index_has_structured_data_and_faq(toolbox_url):
     html = urllib.request.urlopen(toolbox_url + "/", timeout=5).read().decode("utf-8")

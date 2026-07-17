@@ -45,7 +45,7 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["stateless"] is True
     assert payload["private_bank_loaded"] is False
     assert payload["tools"] == 8
-    assert payload["version"] == "0.4.1"
+    assert payload["version"] == "0.4.2"
     assert payload["mcp_endpoint"] == "/mcp"
     assert payload["report_card"]["ready"] is False  # make_server never warms the hatchery
     assert response.headers["X-Frame-Options"] == "DENY"

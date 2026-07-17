@@ -34,7 +34,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 CANONICAL = "https://whetstone.cyberelf.link"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
@@ -260,7 +260,12 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self._headers(content_type, len(body), cache=cache)
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":  # HEAD gets the exact GET headers, no body
+            self.wfile.write(body)
+
+    def do_HEAD(self) -> None:
+        # Crawlers and link-preview bots probe with HEAD before fetching.
+        self.do_GET()
 
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")

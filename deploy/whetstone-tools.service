@@ -16,6 +16,11 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # write; StateDirectory is the only writable path under ProtectSystem=strict.
 StateDirectory=whetstone-tools
 Environment=WHETSTONE_STATE_DIR=/var/lib/whetstone-tools
+# Forge-mined adversary graphs (synced there by whetstone-forge). When the
+# file exists, minting and grading pools both fold it in: the public exam
+# hardens as the forge finds counterexamples, and items stay fair because
+# certification and grading share the exact same pool.
+Environment=WHETSTONE_FORGE_LIBRARY=/var/lib/whetstone-tools/adversary_library.jsonl
 ExecStart=/usr/bin/python3 -m bcv.toolbox_service --host 127.0.0.1 --port 8988
 Restart=on-failure
 RestartSec=3

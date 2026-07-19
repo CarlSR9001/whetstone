@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import threading
 import time
@@ -55,6 +56,7 @@ class Hatchery:
         items_per_session: int = ITEMS_PER_SESSION,
         session_ttl: float = SESSION_TTL_SECONDS,
         max_active_sessions: int = MAX_ACTIVE_SESSIONS,
+        library_path: str | None = None,
     ) -> None:
         self.domain_names = domains
         self.max_n = max_n
@@ -63,6 +65,11 @@ class Hatchery:
         self.items_per_session = items_per_session
         self.session_ttl = session_ttl
         self.max_active_sessions = max_active_sessions
+        # The forge's mined-counterexample library. When present, both the
+        # minting certification pool and the grading pools fold it in, so the
+        # public exam hardens as the forge finds new adversaries — while items
+        # stay fair (certified against the exact pool they are graded with).
+        self.library_path = library_path if library_path is not None else os.environ.get("WHETSTONE_FORGE_LIBRARY")
 
         self.lock = threading.Lock()
         self.ready = False
@@ -91,13 +98,14 @@ class Hatchery:
 
         started = time.perf_counter()
         try:
+            # Same library for pools and minting: item fairness requires that
+            # a mined repair is certified against the pool it is graded with.
+            library = Path(self.library_path) if self.library_path else Path(".does_not_exist.jsonl")
             master: dict[str, list] = {}
             pools: dict[str, list] = {}
             for name in self.domain_names:
                 domain = DOMAINS[name]
-                # The library path never exists in this deployment; the pool is
-                # built purely from sampled and structured graphs, in memory.
-                pools[name] = _stress_pool(domain, self.stress_ns, 40, 0, Path(".does_not_exist.jsonl"))
+                pools[name] = _stress_pool(domain, self.stress_ns, 40, 0, library)
                 items = mint_repair_items(
                     domain,
                     [],
@@ -105,6 +113,7 @@ class Hatchery:
                     max_n=self.max_n,
                     stress_ns=self.stress_ns,
                     seed=0,
+                    library_path=self.library_path,
                 )
                 master[name] = [item for item in items if item.status != "quarantined"]
             with self.lock:
@@ -117,6 +126,15 @@ class Hatchery:
                 self.error = f"{type(error).__name__}"
 
     def status(self) -> dict:
+        library_entries = 0
+        if self.library_path:
+            try:
+                from pathlib import Path as _Path
+
+                text = _Path(self.library_path).read_text(encoding="utf-8")
+                library_entries = sum(1 for line in text.splitlines() if line.strip())
+            except OSError:
+                library_entries = 0
         with self.lock:
             return {
                 "ready": self.ready,
@@ -124,6 +142,7 @@ class Hatchery:
                 "warm_seconds": self.warm_seconds,
                 "master_items": {name: len(items) for name, items in self.master.items()},
                 "active_sessions": len(self.sessions),
+                "forge_library": {"configured": bool(self.library_path), "entries": library_entries},
             }
 
     # ------------------------------------------------------------- sessions

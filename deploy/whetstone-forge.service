@@ -1,0 +1,46 @@
+[Unit]
+Description=Whetstone self-escalating forge (adversary mining controller)
+Documentation=https://github.com/CarlSR9001/whetstone
+After=network-online.target
+
+[Service]
+Type=simple
+User=shankatsu
+Group=shankatsu
+WorkingDirectory=/home/shankatsu/whetstone-forge/state
+Environment=PYTHONPATH=/home/shankatsu/whetstone-forge/src
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Where finds are published for the public service's exam pools.
+Environment=WHETSTONE_SYNC_DIR=/var/lib/whetstone-tools
+ExecStart=/usr/bin/python3 -m bcv.forge_controller
+Restart=always
+RestartSec=30
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# Never contend with the public endpoint: low priority and weight, a hard CPU
+# ceiling under the 4-core box, and a memory cap that OOM-kills the forge
+# (never the public service) if a hunt misbehaves.
+Nice=19
+CPUWeight=20
+CPUQuota=150%
+IOWeight=20
+MemoryMax=1G
+TasksMax=32
+
+# Isolation: writes only its state dir and the service sync dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/home/shankatsu/whetstone-forge/state /var/lib/whetstone-tools
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

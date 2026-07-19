@@ -85,8 +85,21 @@ def test_batches_and_malformed_bodies_are_rejected():
     assert status == 400
 
 
+def test_enumeration_probes_get_empty_results_not_errors():
+    """Registry crawlers probe these; -32601 reads as broken, empty reads as none."""
+    for method, key in (
+        ("resources/list", "resources"),
+        ("resources/templates/list", "resourceTemplates"),
+        ("prompts/list", "prompts"),
+    ):
+        status, body = handle_mcp(rpc(method), next(_IP))
+        assert status == 200
+        assert "error" not in body
+        assert body["result"][key] == []
+
+
 def test_unknown_method_and_unknown_tool():
-    status, body = handle_mcp(rpc("resources/list"), next(_IP))
+    status, body = handle_mcp(rpc("sampling/createMessage"), next(_IP))
     assert body["error"]["code"] == -32601
     status, body = handle_mcp(rpc("tools/call", {"name": "drain_the_bank", "arguments": {}}), next(_IP))
     assert body["error"]["code"] == -32602

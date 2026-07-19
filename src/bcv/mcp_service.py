@@ -238,6 +238,17 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         })
     if method == "ping":
         return 200, _rpc_result(request_id, {})
+    if method in ("resources/list", "resources/templates/list", "prompts/list"):
+        # We declare only the tools capability, but registry crawlers and some
+        # clients probe these anyway; an empty result reads as "none", while
+        # -32601 reads as "broken".
+        STATS.bump("mcp.enumeration_probe")
+        key = {
+            "resources/list": "resources",
+            "resources/templates/list": "resourceTemplates",
+            "prompts/list": "prompts",
+        }[method]
+        return 200, _rpc_result(request_id, {key: []})
     if method == "tools/list":
         return 200, _rpc_result(request_id, {"tools": _tool_list()})
     if method == "tools/call":

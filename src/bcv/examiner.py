@@ -236,16 +236,22 @@ def mint_repair_items(
     max_n: int = 6,
     stress_ns: tuple[int, ...] = (7, 8),
     seed: int = 0,
+    library_path: str | Path | None = None,
 ) -> list[ExamItem]:
     """Repair exam items whose checker is the domain verifier + stress pool.
-    Leakage: any item whose original the student trains on is quarantined."""
+    Leakage: any item whose original the student trains on is quarantined.
+
+    ``library_path`` folds mined adversary graphs into the certification pool.
+    Graders must use the same library: an item is only fair if its mined repair
+    was certified against the pool it will be graded with."""
     from bcv.graph_repair_data import _candidate_expressions
     from bcv.leakage import assess_dsl_leakage
     from bcv.novelty import NoveltyJudge
     from bcv.refinery import _mine_stress_repair, _observe_all, _stress_pool, _verify
 
     observations = _observe_all(domain, max_n, Path(".bcv_runs/examiner_tmp"))
-    pool = _stress_pool(domain, stress_ns, 40, seed, Path(".bcv_runs/examiner_tmp/nolib.jsonl"))
+    pool_library = Path(library_path) if library_path else Path(".bcv_runs/examiner_tmp/nolib.jsonl")
+    pool = _stress_pool(domain, stress_ns, 40, seed, pool_library)
     leak_set = training_originals(buffer_paths)
     fingerprint_observations = [*observations, *pool]
     judge = NoveltyJudge(max_n=max_n)

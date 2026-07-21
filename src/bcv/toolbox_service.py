@@ -35,7 +35,7 @@ from bcv.product_tools import (
 )
 
 
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 CANONICAL = "https://whetstone.cyberelf.link"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")

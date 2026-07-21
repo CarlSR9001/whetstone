@@ -63,6 +63,10 @@ class DomainState:
     exhausted_reason: str = ""
     cycles: int = 0
     finds: int = 0
+    # Highest rung whose cycles actually finish inside CYCLE_TIMEOUT on this
+    # hardware. A timeout is not an error and not a zero — it is the box
+    # saying "this rung does not fit here", so we cap rather than bench.
+    max_feasible_rung: int = len(LADDER) - 1
 
 
 @dataclass
@@ -189,11 +193,12 @@ class Controller:
     def run_cycle(self, domain: str) -> str:
         """One refinery run for one domain; applies the escalation policy."""
         state = self.state.domain(domain)
+        ceiling = max(0, min(state.max_feasible_rung, len(LADDER) - 1))
         if state.exhausted:
-            # Sentinel probe: one shot at the top rung.
-            rung_index = len(LADDER) - 1
+            # Sentinel probe: one shot at the highest rung that actually runs here.
+            rung_index = ceiling
         else:
-            rung_index = min(state.rung, len(LADDER) - 1)
+            rung_index = min(state.rung, ceiling)
         config = LADDER[rung_index]
 
         before = self.library_count()
@@ -204,7 +209,25 @@ class Controller:
         state.cycles += 1
         self.state.total_cycles += 1
 
-        if rc != 0:
+        if rc == 124:
+            # Hardware-budget event: the rung cannot complete inside
+            # CYCLE_TIMEOUT on this box. Cap the ladder there; the normal
+            # patience logic at the capped rung then drives a CLEAN exhaustion
+            # instead of six-hour no-ops accumulating toward an error bench.
+            state.max_feasible_rung = rung_index - 1
+            if state.max_feasible_rung < 0:
+                state.exhausted = True
+                state.exhausted_reason = "no rung fits the cycle budget on this hardware"
+                self.log(f"EXHAUSTED domain={domain}: {state.exhausted_reason}")
+            else:
+                if state.rung > state.max_feasible_rung:
+                    state.rung = state.max_feasible_rung
+                state.zeros_at_rung = 0
+                self.log(
+                    f"BUDGET-CAP domain={domain}: rung {rung_index} exceeds the "
+                    f"{CYCLE_TIMEOUT}s cycle budget; ladder capped at rung {state.max_feasible_rung}"
+                )
+        elif rc != 0:
             state.consecutive_errors += 1
             if state.consecutive_errors >= MAX_ERRORS and not state.exhausted:
                 state.exhausted = True
@@ -223,7 +246,7 @@ class Controller:
             else:
                 state.zeros_at_rung += 1
                 if state.zeros_at_rung >= PATIENCE and not state.exhausted:
-                    if rung_index < len(LADDER) - 1:
+                    if rung_index < ceiling:
                         state.rung = rung_index + 1
                         state.zeros_at_rung = 0
                         self.log(
@@ -232,7 +255,11 @@ class Controller:
                         )
                     else:
                         state.exhausted = True
-                        state.exhausted_reason = f"top rung mined out after {PATIENCE} zero cycles"
+                        at_cap = ceiling < len(LADDER) - 1
+                        state.exhausted_reason = (
+                            f"rung {rung_index} mined out after {PATIENCE} zero cycles"
+                            + (" (higher rungs exceed the hardware budget)" if at_cap else " (top rung)")
+                        )
                         self.log(f"EXHAUSTED domain={domain}: {state.exhausted_reason}")
 
         self.state.put(domain, state)

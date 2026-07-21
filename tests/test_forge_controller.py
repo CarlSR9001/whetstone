@@ -70,6 +70,48 @@ def test_top_rung_exhaustion_then_sentinel_revival(tmp_path):
     assert not controller.all_exhausted()
 
 
+def test_timeout_caps_the_ladder_instead_of_benching(tmp_path):
+    """rc=124 is a hardware-budget event: cap max_feasible_rung, demote, and
+    do NOT count it as an error or a zero."""
+    controller, runner = make(tmp_path, [(124, 0), (0, 0)])
+    state = controller.state.domain("coloring")
+    state.rung = 3
+    controller.state.put("coloring", state)
+    controller.run_cycle("coloring")  # times out at rung 3
+    state = controller.state.domain("coloring")
+    assert state.max_feasible_rung == 2
+    assert state.rung == 2
+    assert state.consecutive_errors == 0 and state.zeros_at_rung == 0
+    assert not state.exhausted
+    controller.run_cycle("coloring")  # next cycle runs at the capped rung
+    assert runner.calls[-1][1] == LADDER[2]
+
+
+def test_patience_at_capped_rung_exhausts_cleanly_and_sentinel_respects_cap(tmp_path):
+    outcomes = [(124, 0)] + [(0, 0)] * PATIENCE + [(0, 0)]
+    controller, runner = make(tmp_path, outcomes)
+    state = controller.state.domain("coloring")
+    state.rung = 3
+    controller.state.put("coloring", state)
+    controller.run_cycle("coloring")  # cap at 2
+    for _ in range(PATIENCE):
+        controller.run_cycle("coloring")  # zeros at rung 2 -> exhausted, never re-escalates
+    state = controller.state.domain("coloring")
+    assert state.exhausted and "hardware budget" in state.exhausted_reason
+    controller.run_cycle("coloring")  # sentinel probe
+    assert runner.calls[-1][1] == LADDER[2]  # probes at the cap, not the top
+
+
+def test_timeout_at_rung_zero_means_nothing_fits(tmp_path):
+    controller, _ = make(tmp_path, [(124, 0)])
+    state = controller.state.domain("coloring")
+    state.rung = 0
+    controller.state.put("coloring", state)
+    controller.run_cycle("coloring")
+    state = controller.state.domain("coloring")
+    assert state.exhausted and "no rung fits" in state.exhausted_reason
+
+
 def test_consecutive_errors_bench_the_domain(tmp_path):
     controller, _ = make(tmp_path, [(1, 0)] * fc.MAX_ERRORS)
     for _ in range(fc.MAX_ERRORS):

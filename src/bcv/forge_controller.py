@@ -32,8 +32,16 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from bcv._version import __version__, build_commit
+
+try:
+    import fcntl
+except ImportError:  # Windows test/development hosts do not provide POSIX locks.
+    fcntl = None
 
 # (restarts, steps, anneal_ns) — stress_ns stays fixed: it is the
 # certification pool the *exam* uses, and must remain comparable across time.
@@ -52,6 +60,7 @@ SLEEP_SENTINEL = 86_400.0
 CYCLE_TIMEOUT = 21_600  # 6h hard cap per refinery run
 LIBRARY_NAME = "adversary_library.jsonl"
 STATE_NAME = "forge_controller_state.json"
+RELEASE_STATUS_NAME = "forge_release_status.json"
 
 
 @dataclass
@@ -116,6 +125,27 @@ class Controller:
         tmp.write_text(json.dumps(asdict(self.state), indent=1), encoding="utf-8")
         tmp.replace(self.state_path)
 
+    def write_release_status(self, library_sync: str = "not_checked") -> None:
+        """Publish the exact running release for deployment health gates."""
+        target = self.work_dir / RELEASE_STATUS_NAME
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps(
+                {
+                    "status": "running",
+                    "version": __version__,
+                    "build_commit": build_commit(),
+                    "library_sync": library_sync,
+                    "pid": os.getpid(),
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        tmp.replace(target)
+
     def log(self, message: str) -> None:
         line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {message}"
         print(line, flush=True)
@@ -152,18 +182,29 @@ class Controller:
             tmp.replace(self.library)
         return removed
 
-    def sync_library(self) -> None:
+    def sync_library(self) -> str:
         """Atomically publish the library where the public service reads it."""
-        if not self.sync_dir or not self.library.exists():
-            return
+        if not self.sync_dir:
+            return "not_configured"
+        if not self.library.exists():
+            return "source_absent"
         target = Path(self.sync_dir) / LIBRARY_NAME
+        tmp = target.with_suffix(".sync-tmp")
         try:
-            tmp = target.with_suffix(".sync-tmp")
-            tmp.write_bytes(self.library.read_bytes())
+            content = self.library.read_bytes()
+            try:
+                if target.read_bytes() == content:
+                    self.log(f"library already synchronized ({self.library_count()} entries) -> {target}")
+                    return "unchanged"
+            except FileNotFoundError:
+                pass
+            tmp.write_bytes(content)
             tmp.replace(target)
             self.log(f"synced library ({self.library_count()} entries) -> {target}")
+            return "published"
         except OSError as error:
             self.log(f"sync FAILED: {type(error).__name__}")
+            raise
 
     # ------------------------------------------------------------- cycles
 
@@ -190,7 +231,23 @@ class Controller:
         except subprocess.TimeoutExpired:
             return 124, time.perf_counter() - started
 
+    @contextmanager
+    def _cycle_lock(self):
+        """Coordinate refinery cycles with atomic release activation on Linux."""
+        with open(self.work_dir / "forge_cycle.lock", "a+b") as handle:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
     def run_cycle(self, domain: str) -> str:
+        with self._cycle_lock():
+            return self._run_cycle_locked(domain)
+
+    def _run_cycle_locked(self, domain: str) -> str:
         """One refinery run for one domain; applies the escalation policy."""
         state = self.state.domain(domain)
         ceiling = max(0, min(state.max_feasible_rung, len(LADDER) - 1))
@@ -277,13 +334,15 @@ class Controller:
 
     def main_loop(self) -> None:
         self.log(
-            f"forge-controller start pid={os.getpid()} ladder_rungs={len(LADDER)} "
+            f"forge-controller start pid={os.getpid()} version={__version__} "
+            f"build_commit={build_commit()} ladder_rungs={len(LADDER)} "
             f"patience={PATIENCE} domains={list(self.domain_names)} sync_dir={self.sync_dir}"
         )
         removed = self.dedupe_library()
         if removed:
             self.log(f"startup dedupe removed {removed} duplicate library entries")
-        self.sync_library()
+        library_sync = self.sync_library()
+        self.write_release_status(library_sync)
         while True:
             for name in self.domain_names:
                 self.run_cycle(name)

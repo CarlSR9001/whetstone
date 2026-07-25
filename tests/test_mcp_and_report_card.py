@@ -16,6 +16,7 @@ import urllib.request
 import pytest
 
 import bcv.ephemeral as ephemeral
+from bcv._version import __version__
 from bcv.ephemeral import Hatchery, TierError
 from bcv.mcp_service import handle_mcp
 from bcv.product_tools import examples, gate_results
@@ -62,6 +63,7 @@ def test_initialize_negotiates_protocol_and_declares_tools():
     result = body["result"]
     assert result["protocolVersion"] == "2025-06-18"
     assert result["serverInfo"]["name"] == "whetstone-tools"
+    assert result["serverInfo"]["version"] == __version__
     assert "tools" in result["capabilities"]
     assert "no private exam bank" in result["instructions"].lower()
 

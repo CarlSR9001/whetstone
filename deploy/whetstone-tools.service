@@ -10,6 +10,7 @@ User=shankatsu
 Group=shankatsu
 WorkingDirectory=/opt/whetstone-tools/current
 Environment=PYTHONPATH=/opt/whetstone-tools/current/src
+EnvironmentFile=-/etc/whetstone-tools/release.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Aggregate metrics (salted-hash clients, counters only) are the one sanctioned

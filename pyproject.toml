@@ -1,6 +1,6 @@
 [project]
 name = "branching-continual-verification"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Verifier-grounded private exam banks and auditable AI promotion gates."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,18 +13,58 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+agents = [
+  "mcp>=1.0",
+]
+engines = [
+  "python-chess>=1.999",
+]
+local-models = [
   "torch",
   "transformers",
   "peft",
   "bitsandbytes",
   "sentencepiece",
+]
+all = [
   "mcp>=1.0",
   "python-chess>=1.999",
+  "torch",
+  "transformers",
+  "peft",
+  "bitsandbytes",
+  "sentencepiece",
+]
+test = [
+  "build>=1.2",
+  "pytest>=8",
+  "mcp>=1.0",
+  "python-chess>=1.999",
+  "torch",
+  "transformers",
+  "peft",
+  "bitsandbytes",
+  "sentencepiece",
 ]
 
 [project.scripts]
 whetstone = "bcv.cli:main"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "bcv._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bcv = ["toolbox_static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

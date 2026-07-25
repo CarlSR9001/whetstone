@@ -9,3 +9,7 @@ results/private/
 gtp_logs/
 output/
 .playwright-cli/
+build/
+dist/
+*.zip
+*.tmp

@@ -1,13 +1,15 @@
 """Public, stateless HTTP shell for the Whetstone product tools.
 
-The service binds to loopback by default, accepts bounded JSON requests, writes
-nothing, and never opens an examiner bank.  Nginx supplies TLS and an additional
-rate limit in production.
+The service binds to loopback by default, accepts bounded JSON requests, never
+persists request bodies or results, and never opens an examiner bank. It does
+retain privacy-preserving operational counters; Nginx supplies TLS, access
+logging, and an additional rate limit in production.
 """
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import mimetypes
 import os
@@ -16,6 +18,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from bcv._version import __version__, build_commit
 from bcv.ephemeral import ensure_started, hatchery
 from bcv.mcp_service import handle_mcp
 from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
@@ -34,13 +37,43 @@ from bcv.product_tools import (
     safe_patch,
 )
 
-
-VERSION = "0.4.5"
 CANONICAL = "https://whetstone.cyberelf.link"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).with_name("toolbox_static")
-REPO_ROOT = Path(__file__).resolve().parents[2]
 STARTED_AT = time.time()
+
+
+def _normalized_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def _trusted_client_ip(peer: str, real_ip: str | None, forwarded_for: str | None) -> str:
+    """Resolve the caller only when the immediate peer is the loopback proxy.
+
+    Nginx overwrites both forwarding headers with ``$remote_addr``.  Taking the
+    first caller-supplied X-Forwarded-For value would let remote clients mint
+    arbitrary rate-limit identities.
+    """
+    normalized_peer = _normalized_ip(peer)
+    if normalized_peer is None:
+        return peer
+    if not ipaddress.ip_address(normalized_peer).is_loopback:
+        return normalized_peer
+
+    normalized_real = _normalized_ip(real_ip)
+    if normalized_real is not None:
+        return normalized_real
+
+    # Rightmost is the address appended by the nearest trusted proxy.  The
+    # production Nginx config overwrites this header, but this remains safe if
+    # an older proxy configuration briefly supplies a chain.
+    forwarded = (forwarded_for or "").rsplit(",", 1)[-1].strip()
+    return _normalized_ip(forwarded) or normalized_peer
 
 
 def _load_json(path: Path) -> dict:
@@ -52,41 +85,16 @@ def _load_json(path: Path) -> dict:
 
 
 def evidence() -> dict:
-    relevance = _load_json(REPO_ROOT / "results" / "relevance_eval_report.json")
-    ladder = _load_json(REPO_ROOT / "results" / "cross_scale_ladder_receipt.json")
-    redteam = _load_json(REPO_ROOT / "results" / "redteam_gate_receipt.json")
-    scale_gate = (ladder.get("gates") or [{}])[0]
-    return {
-        "relevance": {
-            "probes": relevance.get("probes"),
-            "accuracy": relevance.get("accuracy", {}),
-            "top1_finds_truly_relevant": (relevance.get("estimator_validation") or {}).get("top1_finds_truly_relevant", {}),
-            "quadrants": relevance.get("quadrants", {}),
-        },
-        "cross_scale": {
-            "bank_items": (ladder.get("bank") or {}).get("items"),
-            "models": len(ladder.get("ladder") or []),
-            "largest_contrast": {
-                "gains": scale_gate.get("gains"),
-                "regressions": scale_gate.get("regressions"),
-                "p": scale_gate.get("p"),
-                "verdict": scale_gate.get("verdict"),
-            },
-        },
-        "redteam": {
-            "paraphrase_caught": (redteam.get("paraphrase_attack") or {}).get("behavioral_fingerprint_matched"),
-            "inflation_caught": (redteam.get("inflation_attack") or {}).get("caught"),
-            "scope": redteam.get("note"),
-        },
-        "source": "sanitized committed receipts; no private item content",
-    }
+    return _load_json(STATIC_ROOT / "evidence.json")
 
 
 def _llms_body() -> str:
     return (
         "# Whetstone Tools\n\n"
         "> Verifier-grounded evaluation tools for AI systems, callable by agents over MCP or REST. "
-        "Stateless, no auth, nothing stored, no private exam bank loaded.\n\n"
+        "Stateless requests, no auth, request payloads and results are not persisted, "
+        "no private exam bank loaded. "
+        "Operational counters and standard access logs are retained.\n\n"
         "Whetstone decides whether a new agent/model version genuinely improved: exposure quarantine, "
         "paired promotion gates (PASS/HOLD/BLOCK with an exact McNemar test), leakage audits, bank "
         "health, SafePatch conservation edits, graph counterexample search, memory relevance scoring, "
@@ -129,7 +137,8 @@ def _sitemap_xml() -> str:
 def _mcp_manifest() -> dict:
     return {
         "name": "whetstone-tools",
-        "version": VERSION,
+        "version": __version__,
+        "build_commit": build_commit(),
         "description": (
             "Promotion gate for AI agents: leakage audits, PASS/HOLD/BLOCK verdicts with exact "
             "statistics, and a disposable report card that grades the connecting agent by checker spec."
@@ -176,10 +185,13 @@ def _openapi_spec() -> dict:
         "openapi": "3.1.0",
         "info": {
             "title": "Whetstone Tools",
-            "version": VERSION,
+            "version": __version__,
+            "x-build-commit": build_commit(),
             "description": (
-                "Verifier-grounded evaluation tools for AI systems. Stateless, unauthenticated, "
-                "nothing stored. Every POST tool is also exposed as an MCP tool at /mcp."
+                "Verifier-grounded evaluation tools for AI systems. Requests are stateless and "
+                "unauthenticated; payloads and results are not persisted. Privacy-preserving "
+                "operational counters and standard access logs are retained. Every POST tool is "
+                "also exposed as an MCP tool at /mcp."
             ),
             "license": {"name": "AGPL-3.0-or-later", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
         },
@@ -212,22 +224,27 @@ REST_TOOL_NAMES = {
 
 
 class ToolboxHandler(BaseHTTPRequestHandler):
-    server_version = "WhetstoneTools/0.2"
+    server_version = f"WhetstoneTools/{__version__}"
 
     def log_message(self, format: str, *args) -> None:
         # Nginx records method/path/status.  The app deliberately never logs a body.
         pass
 
     def _client_ip(self) -> str:
-        forwarded = self.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip()
-        return forwarded or self.client_address[0]
+        return _trusted_client_ip(
+            self.client_address[0],
+            self.headers.get("X-Real-IP"),
+            self.headers.get("X-Forwarded-For"),
+        )
 
     def _cors(self) -> None:
-        """Public, unauthenticated, stateless API: no cookies, no sessions, no
-        user state to forge a request against. Allowing any origin costs nothing
-        and is the only way browser clients and hosted MCP clients (claude.ai
-        connectors send Origin) can reach the endpoint at all. Credentials are
-        never allowed, so '*' stays safe."""
+        """Public, unauthenticated API with no cookies or ambient authority.
+
+        Report-card ids are explicit one-shot bearer values, not browser
+        credentials. Allowing any origin is required for browser clients and
+        hosted MCP clients (claude.ai connectors send Origin); credentials are
+        never allowed, so ``*`` stays safe.
+        """
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header(
@@ -288,7 +305,8 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self._json(200, {
                 "status": "ok",
-                "version": VERSION,
+                "version": __version__,
+                "build_commit": build_commit(),
                 "stateless": True,
                 "private_bank_loaded": False,
                 "uptime_seconds": round(time.time() - STARTED_AT, 1),
@@ -436,7 +454,7 @@ def serve(host: str = "127.0.0.1", port: int = 8988) -> None:
     server = make_server(host, port)
     ensure_started()  # warm the report-card hatchery in the background
     STATS.start_flusher()
-    print(f"Whetstone Tools {VERSION} on http://{host}:{port} (stateless; no private bank loaded)")
+    print(f"Whetstone Tools {__version__} on http://{host}:{port} (stateless; no private bank loaded)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

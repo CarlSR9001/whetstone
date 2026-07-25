@@ -6,7 +6,7 @@ id. That is the smallest spec-compliant surface, it adds zero dependencies to
 the VPS, and it inherits the toolbox's trust boundary:
 
 - Tier 0 tools wrap the existing stateless product tools (the caller brings
-  every byte of data; nothing persists).
+  every byte of data; request bodies and results are not persisted).
 - Tier 1 tools drive the disposable report-card hatchery in bcv.ephemeral.
 - No tool can reach a private bank; none is loaded in this process, ever.
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from bcv._version import __version__, build_commit
 from bcv.ephemeral import TierError, hatchery
 from bcv.product_tools import (
     ProductInputError,
@@ -36,12 +37,13 @@ from bcv.ratelimit import HUNTER_LIMIT, HUNTER_SLOT
 from bcv.stats import STATS
 
 SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "whetstone-tools", "version": "0.3.0"}
+SERVER_INFO = {"name": "whetstone-tools", "version": __version__}
 
 INSTRUCTIONS = (
     "Whetstone's public verifier toolbox as MCP tools. Two tiers. Tier 0 is stateless: "
     "you supply the data (exam rows, paired results, documents, event logs) and get back "
-    "audits, promotion verdicts, patches, or counterexamples; nothing is stored. Tier 1 is "
+    "audits, promotion verdicts, patches, or counterexamples; payloads and results are not "
+    "persisted, while operational counters and standard access logs are retained. Tier 1 is "
     "the disposable report card: report_card_start hands your agent a small graph-repair "
     "exam minted from the repository's public frontier, report_card_submit grades it by "
     "checker spec (any verified strict refinement passes; no answer key exists) and "
@@ -164,6 +166,8 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
     ),
     "about_whetstone": (
         lambda p, ip: {
+            "version": __version__,
+            "build_commit": build_commit(),
             "catalog": catalog(),
             "mcp_tiers": {
                 "tier0": "stateless analyses of caller-supplied data",

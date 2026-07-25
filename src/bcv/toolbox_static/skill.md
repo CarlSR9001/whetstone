@@ -17,7 +17,8 @@ description: >-
 Whetstone is a promotion gate for AI systems: it decides whether a new version
 genuinely improved, on evidence the system under exam could not have trained
 on. This hosted service is the **public, stateless demonstration tier**. It
-loads no private exam bank, stores nothing, and requires no account or key.
+loads no private exam bank, does not persist request payloads or results, and
+requires no account or key. Operational counters and access logs are retained.
 
 Source: https://github.com/CarlSR9001/whetstone (AGPL-3.0). Human page:
 https://whetstone.cyberelf.link/ · Agent page: https://whetstone.cyberelf.link/for-agents
@@ -42,7 +43,8 @@ version and report-card readiness.
 
 ## Tier 0 — stateless analyses (you bring the data)
 
-Nothing is stored; results are deterministic receipts with SHA-256 hashes.
+Request payloads and results are not persisted; responses are deterministic
+receipts with SHA-256 hashes.
 
 | MCP tool | REST | What it does |
 | --- | --- | --- |
@@ -129,7 +131,9 @@ retention, and SHA-256 commitments over the item set and your answers.
 
 ## Trust boundary (why this is safe to use)
 
-The hosted process is stateless, never loads a private exam bank, serves no
-private item content on any surface, and writes nothing to disk. Report-card
-items are disposable by construction. Do not send secrets or customer data;
-inputs should be disposable or sanitized.
+The hosted process never loads a private exam bank, serves no private item
+content, and does not persist request bodies, uploads, prompts, answers,
+results, or report-card sessions. Privacy-preserving usage metrics and standard
+Nginx access logs are retained. Report-card items are disposable by
+construction. Do not send secrets or customer data; inputs should be disposable
+or sanitized.

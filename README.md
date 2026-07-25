@@ -36,6 +36,10 @@ Selected results (full ledger with methods, nulls, and receipts in
 
 Licensed AGPL-3.0. Commercial licensing available from the author.
 
+Install the dependency-light core (CLI and stateless toolbox) with
+`pip install .`. Optional integrations are grouped as `agents`, `engines`, and
+`local-models`; `pip install ".[all]"` installs every integration.
+
 ## The product layer
 
 The research harness above is operable as a product: one CLI, adapters for any

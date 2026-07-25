@@ -8,7 +8,8 @@ Type=simple
 User=shankatsu
 Group=shankatsu
 WorkingDirectory=/home/shankatsu/whetstone-forge/state
-Environment=PYTHONPATH=/home/shankatsu/whetstone-forge/src
+Environment=PYTHONPATH=/opt/whetstone-tools/current/src
+EnvironmentFile=-/etc/whetstone-tools/release.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Where finds are published for the public service's exam pools.

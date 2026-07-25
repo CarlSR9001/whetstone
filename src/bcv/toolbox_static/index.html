@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Whetstone is a promotion gate for AI agents: leakage and contamination audits, PASS/HOLD/BLOCK release verdicts with exact statistics, and a live MCP endpoint any agent can connect to. Stateless, free to try, AGPL source.">
-  <meta name="theme-color" content="#10191f">
+  <meta name="theme-color" content="#02080d">
   <link rel="icon" href="data:,">
   <link rel="canonical" href="https://whetstone.cyberelf.link/">
-  <link rel="stylesheet" href="/styles.css?v=0.2.2">
+  <link rel="stylesheet" href="/styles.css?v=0.5.0">
   <title>Whetstone &mdash; AI agent evaluation gate: leakage audits, promotion verdicts, live MCP server</title>
 
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Whetstone">
+  <meta property="og:site_name" content="Cyberelf Labs // Whetstone">
   <meta property="og:title" content="Whetstone — the promotion gate for AI agents">
   <meta property="og:description" content="Stop asking whether your agent got better. Make it prove it: exposure quarantine, paired verdicts with exact statistics, and a live MCP endpoint that grades agents on exams they provably never trained on.">
   <meta property="og:url" content="https://whetstone.cyberelf.link/">
@@ -20,7 +20,7 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Whetstone — the promotion gate for AI agents">
-  <meta name="twitter:description" content="Leakage audits, PASS/HOLD/BLOCK release verdicts, and a live MCP endpoint any agent can connect to. No signup, nothing stored.">
+  <meta name="twitter:description" content="Leakage audits, PASS/HOLD/BLOCK release verdicts, and a live MCP endpoint any agent can connect to. No signup; request payloads and results are not retained.">
   <meta name="twitter:image" content="https://whetstone.cyberelf.link/og.png">
 
   <script type="application/ld+json">
@@ -65,7 +65,7 @@
           {
             "@type": "Question",
             "name": "Does Whetstone store my data?",
-            "acceptedAnswer": { "@type": "Answer", "text": "No. The public service is stateless: no accounts, no cookies, no stored request bodies, and no private exam bank is loaded in the hosted process. Only aggregate usage counters are kept." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Request bodies, uploads, prompts, answers, results, and report-card sessions are not persisted. Privacy-preserving usage metrics (counters and salted client hashes) and standard Nginx access logs are retained. No account, cookie, or private exam bank is involved." }
           },
           {
             "@type": "Question",
@@ -79,14 +79,31 @@
   </script>
 </head>
 <body>
+  <a class="skip-link" href="#tools">Skip to the workbench</a>
   <header class="topbar">
-    <a class="brand" href="#top" aria-label="Whetstone Tools home">WHETSTONE<span>.</span></a>
+    <a class="brand" href="#top" aria-label="Whetstone by Cyberelf Labs, home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" focusable="false">
+          <defs>
+            <linearGradient id="whetstone-rune" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#dfffff"/><stop offset=".46" stop-color="#43f5e7"/><stop offset="1" stop-color="#19a9ff"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 3 55 16.5v27L32 61 9 43.5v-27L32 3Z" fill="#07131c" stroke="url(#whetstone-rune)" stroke-width="1.25"/>
+          <path d="M32 10c6.4 8.8 10.5 13.2 18 18.2-4.3 11.4-10 18.1-18 25.8-8-7.7-13.7-14.4-18-25.8C21.5 23.2 25.6 18.8 32 10Z" fill="none" stroke="url(#whetstone-rune)" stroke-width="1.6"/>
+          <path d="M16 27.8c6.6 1.1 11.3 3.9 16 10.2 4.7-6.3 9.4-9.1 16-10.2M32 11v27m0 0-9.2 8.3M32 38l9.2 8.3" fill="none" stroke="url(#whetstone-rune)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="32" cy="38" r="3.4" fill="#dfffff" stroke="#43f5e7" stroke-width="1.5"/>
+        </svg>
+      </span>
+      <span class="brand-copy"><strong>Whetstone</strong><small>Cyberelf Labs // deployment authority</small></span>
+    </a>
     <nav aria-label="Primary navigation">
       <a href="#tools">Workbench</a>
       <a href="#evidence">Receipts</a>
       <a href="#boundary">Boundary</a>
       <a href="/for-agents">For agents</a>
       <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">Core source</a>
+      <a class="lab-link" href="https://cyberelf.link/" rel="noreferrer">Cyberelf Labs <span aria-hidden="true">&nearr;</span></a>
     </nav>
     <span class="live-chip"><i></i> live &middot; stateless &middot; private bank absent</span>
   </header>
@@ -94,7 +111,7 @@
   <main id="top">
     <section class="hero">
       <div class="hero-main">
-        <p class="eyebrow">Evaluation infrastructure you can interrogate</p>
+        <p class="eyebrow">Cyberelf Labs // Whetstone // deployment authority</p>
         <h1>Stop asking whether it got better.</h1>
         <p class="hero-declaration">Make it <em>prove</em> it.</p>
         <p class="hero-copy">Eight focused tools turn model results, exposure records, memory traces, patches, and conjectures into inspectable evidence. Every verdict comes with the item-level path that produced it.</p>
@@ -115,7 +132,7 @@
       </aside>
 
       <div class="trust-row" aria-label="Hosted service boundaries">
-        <span>No accounts</span><span>No cookies</span><span>No persistence</span><span>No private bank</span><span>Exact receipts</span>
+        <span>No accounts</span><span>No cookies</span><span>No payload retention</span><span>No private bank</span><span>Exact receipts</span>
       </div>
       <div class="warning">
         <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. Private exams belong in the local CLI or a deployment inside your trust boundary.
@@ -257,7 +274,7 @@
           </details>
           <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
             <summary style="cursor:pointer;font-weight:700">Do you store my data?</summary>
-            <p style="margin:10px 0 0;color:var(--muted)">No. The public service is stateless: no accounts, no cookies, no stored request bodies, and no private exam bank is loaded in the hosted process. Only aggregate usage counters are kept.</p>
+            <p style="margin:10px 0 0;color:var(--muted)">Request bodies, uploads, prompts, answers, results, and report-card sessions are not persisted. Privacy-preserving usage metrics (counters and salted client hashes) and standard Nginx access logs are retained. No account, cookie, or private exam bank is involved.</p>
           </details>
           <details style="padding:14px 0">
             <summary style="cursor:pointer;font-weight:700">What does it cost?</summary>
@@ -269,7 +286,7 @@
   </main>
 
   <footer>
-    <span>Whetstone Tools <b id="serviceVersion">v&mdash;</b></span>
+    <span><strong>Cyberelf Labs // Whetstone</strong> <b id="serviceVersion">v&mdash;</b></span>
     <span>AGPL-3.0 &middot; commercial licensing available</span>
     <span><a href="/for-agents">for agents</a> &middot; <a href="/skill.md">skill.md</a> &middot; <a href="/llms.txt">llms.txt</a></span>
     <span id="serviceState">checking service boundary&hellip;</span>

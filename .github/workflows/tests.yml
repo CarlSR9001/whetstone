@@ -2,11 +2,65 @@ name: tests
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
+  publication:
+    name: publication boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publication audit
+        shell: pwsh
+        run: ./scripts/audit_publication.ps1 -IncludeUntracked
+      - name: Static checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check origin/main...HEAD
+          else
+            before="${{ github.event.before }}"
+            if [[ "$before" =~ ^0+$ ]] || ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              git diff-tree --check --root HEAD
+            else
+              git diff --check "${before}..HEAD"
+            fi
+          fi
+          node --check src/bcv/toolbox_static/app.js
+          bash -n deploy/install-release.sh deploy/publish.sh
+      - name: Verify immutable archive provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir archive-check
+          git archive --format=tar --output=archive-check/release.tar HEAD
+          tar -xf archive-check/release.tar -C archive-check
+          embedded="$(
+            python3 - archive-check/src/bcv/_version.py <<'PY'
+          import importlib.util
+          import os
+          import sys
+
+          os.environ.pop("WHETSTONE_BUILD_COMMIT", None)
+          spec = importlib.util.spec_from_file_location("_release", sys.argv[1])
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          print(module.build_commit())
+          PY
+          )"
+          test "$embedded" = "$GITHUB_SHA"
+
   pytest:
+    name: full suite (Python 3.11)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -15,7 +69,38 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install package and test runner
-        run: python -m pip install -e . pytest
+      - name: Install full test environment
+        run: python -m pip install -e ".[test]"
       - name: Run suite
-        run: python -m pytest -q
+        run: python -m pytest -q -p no:cacheprovider
+
+  wheel:
+    name: clean wheel (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Build wheel
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Smoke clean install without optional dependencies
+        shell: pwsh
+        run: |
+          $wheel = Get-ChildItem dist/*.whl | Select-Object -First 1
+          python scripts/clean_install_smoke.py --wheel $wheel.FullName
+      - name: Retain canonical wheel
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: whetstone-wheel
+          path: dist/*

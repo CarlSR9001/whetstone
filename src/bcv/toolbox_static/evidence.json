@@ -1,0 +1,40 @@
+{
+  "cross_scale": {
+    "bank_items": 48,
+    "largest_contrast": {
+      "gains": 12,
+      "p": 0.00048828125,
+      "regressions": 0,
+      "verdict": "PASS"
+    },
+    "models": 8
+  },
+  "redteam": {
+    "inflation_caught": true,
+    "paraphrase_caught": true,
+    "scope": "Sanitized receipt from the private red-team artifact. It omits attack expressions, item payloads, prompts, and bank contents. The test demonstrates defenses against the specified attacks; it is not a proof against every leakage mechanism."
+  },
+  "relevance": {
+    "accuracy": {
+      "relevance": 0.9876,
+      "salience": 0.6081,
+      "two_stage": 0.8765
+    },
+    "probes": 1457,
+    "quadrants": {
+      "aligned": 59,
+      "high_sal_low_rel": 2856,
+      "low_sal_high_rel": 101
+    },
+    "top1_finds_truly_relevant": {
+      "relevance_est": 0.808,
+      "salience": 0.04
+    }
+  },
+  "source": "sanitized committed receipts; no private item content",
+  "source_receipts_sha256": {
+    "cross_scale_ladder_receipt.json": "9533a409c83b479b70267b41784c1574fa6e99c9e7ba260698ea6c4d24b36be3",
+    "redteam_gate_receipt.json": "e345cf4f9b34d00c4e7060437826b92a1ded32cbc3553c29044f3f8275e33293",
+    "relevance_eval_report.json": "93daa31acf53a8ceaf4d8cefb56ca6866440779a9f76d5159e6f935cd0570605"
+  }
+}

@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import bcv.forge_controller as fc
 from bcv.forge_controller import LADDER, PATIENCE, Controller
 
@@ -37,6 +39,18 @@ def make(tmp_path, outcomes, domains=("coloring",), sync_dir=None):
     controller = Controller(tmp_path, domains=domains, runner=runner, sleeper=lambda _s: None, sync_dir=sync_dir)
     ref["c"] = controller
     return controller, runner
+
+
+def test_release_status_is_atomic_and_machine_readable(tmp_path):
+    controller, _ = make(tmp_path, [])
+    controller.write_release_status()
+    status = json.loads((tmp_path / "forge_release_status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "running"
+    assert status["version"] == "0.5.0"
+    assert status["build_commit"] == "development"
+    assert status["library_sync"] == "not_checked"
+    assert status["pid"] > 0
+    assert not (tmp_path / "forge_release_status.tmp").exists()
 
 
 def test_zero_streak_escalates_and_success_resets(tmp_path):
@@ -151,6 +165,39 @@ def test_sync_publishes_library_atomically(tmp_path):
     published = sync / fc.LIBRARY_NAME
     assert published.exists()
     assert len(published.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_sync_skips_byte_identical_publication(tmp_path):
+    sync = tmp_path / "service_state"
+    sync.mkdir()
+    controller, _ = make(tmp_path, [], sync_dir=str(sync))
+    content = b'{"domain":"coloring","graph_id":"same"}\n'
+    controller.library.write_bytes(content)
+    published = sync / fc.LIBRARY_NAME
+    published.write_bytes(content)
+    before = published.stat()
+
+    assert controller.sync_library() == "unchanged"
+
+    after = published.stat()
+    assert (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) == (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    )
+
+
+def test_startup_sync_failure_prevents_release_status(tmp_path):
+    invalid_sync_dir = tmp_path / "not-a-directory"
+    invalid_sync_dir.write_text("occupied", encoding="utf-8")
+    controller, _ = make(tmp_path, [], sync_dir=str(invalid_sync_dir))
+    controller.library.write_text('{"domain":"coloring","graph_id":"g1"}\n', encoding="utf-8")
+
+    with pytest.raises(OSError):
+        controller.main_loop()
+
+    assert not (tmp_path / fc.RELEASE_STATUS_NAME).exists()
 
 
 def test_hatchery_passes_library_to_both_mint_and_pools(tmp_path, monkeypatch):

@@ -1,12 +1,12 @@
 """Tier 1: disposable report-card sessions over an in-memory master mint.
 
-The public service must never open a private bank, never write to disk, and
-never hold the CPU hostage to an anonymous caller. This module satisfies all
-three at once:
+The public service must never open a private bank, never persist exam/session
+data, and never hold the CPU hostage to an anonymous caller. This module
+satisfies all three at once:
 
 - A background *hatchery* thread mints one master set of graph-repair items
-  (coloring + MIS) when the service boots. Minting and grading both run on the
-  in-memory observation cache, so nothing ever touches the filesystem.
+  (coloring + MIS) when the service boots. Minting and grading share an
+  in-memory observation cache plus the public forge library read from disk.
 - A session is a random sample of master items behind fresh public ids. The
   caller gets prompts (these items are disposable by construction — the
   frontier they are minted from is public in the repository, so a session is a
@@ -79,15 +79,56 @@ class Hatchery:
         self.pools: dict[str, list] = {}
         self.sessions: dict[str, dict] = {}
         self._thread: threading.Thread | None = None
+        self._has_started = False
+        self._observed_library_signature: tuple | None = None
 
     # ------------------------------------------------------------- warm-up
 
     def start(self) -> None:
         with self.lock:
-            if self._thread is not None:
+            if self._has_started:
                 return
+            self._has_started = True
+            self.ready = False
+            self.error = None
+            self._observed_library_signature = self._library_signature()
             self._thread = threading.Thread(target=self._warm, name="whetstone-hatchery", daemon=True)
         self._thread.start()
+
+    def _library_signature(self) -> tuple | None:
+        """Return the identity of the forge's latest atomic publication."""
+        if not self.library_path:
+            return None
+        try:
+            stat = os.stat(self.library_path)
+        except FileNotFoundError:
+            return ("missing",)
+        except OSError as error:
+            return ("unreadable", type(error).__name__, error.errno)
+        # Controller.sync_library publishes with os.replace. The inode plus
+        # nanosecond mtime and size therefore changes on every real sync without
+        # hashing the entire library on every report-card request.
+        return ("file", stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+    def _refresh_if_library_changed(self) -> bool:
+        """Start one background rebuild when the forge publishes a new file."""
+        if not self.library_path:
+            return False
+        signature = self._library_signature()
+        with self.lock:
+            if (
+                not self._has_started
+                or self._thread is not None
+                or signature == self._observed_library_signature
+            ):
+                return False
+            self.ready = False
+            self.error = None
+            self._observed_library_signature = signature
+            self._thread = threading.Thread(target=self._warm, name="whetstone-hatchery", daemon=True)
+            thread = self._thread
+        thread.start()
+        return True
 
     def _warm(self) -> None:
         from pathlib import Path
@@ -97,35 +138,59 @@ class Hatchery:
         from bcv.refinery import _stress_pool
 
         started = time.perf_counter()
+        with self.lock:
+            self._has_started = True
+            self.ready = False
+            self.error = None
         try:
-            # Same library for pools and minting: item fairness requires that
-            # a mined repair is certified against the pool it is graded with.
-            library = Path(self.library_path) if self.library_path else Path(".does_not_exist.jsonl")
-            master: dict[str, list] = {}
-            pools: dict[str, list] = {}
-            for name in self.domain_names:
-                domain = DOMAINS[name]
-                pools[name] = _stress_pool(domain, self.stress_ns, 40, 0, library)
-                items = mint_repair_items(
-                    domain,
-                    [],
-                    max_items=self.master_items_per_domain,
-                    max_n=self.max_n,
-                    stress_ns=self.stress_ns,
-                    seed=0,
-                    library_path=self.library_path,
-                )
-                master[name] = [item for item in items if item.status != "quarantined"]
+            # A forge sync can land while a rebuild is running. Discard that
+            # mixed attempt and retry so minting and grading always consume one
+            # stable library publication.
+            for attempt in range(3):
+                signature_before = self._library_signature()
+                # Same library for pools and minting: item fairness requires
+                # that a mined repair is certified against the pool it is
+                # graded with.
+                library = Path(self.library_path) if self.library_path else Path(".does_not_exist.jsonl")
+                master: dict[str, list] = {}
+                pools: dict[str, list] = {}
+                for name in self.domain_names:
+                    domain = DOMAINS[name]
+                    pools[name] = _stress_pool(domain, self.stress_ns, 40, 0, library)
+                    items = mint_repair_items(
+                        domain,
+                        [],
+                        max_items=self.master_items_per_domain,
+                        max_n=self.max_n,
+                        stress_ns=self.stress_ns,
+                        seed=0,
+                        library_path=self.library_path,
+                    )
+                    master[name] = [item for item in items if item.status != "quarantined"]
+                signature_after = self._library_signature()
+                if signature_before == signature_after:
+                    break
+                if attempt == 2:
+                    raise RuntimeError("forge library changed repeatedly during hatchery warm-up")
             with self.lock:
                 self.master = master
                 self.pools = pools
                 self.ready = True
+                self.error = None
                 self.warm_seconds = round(time.perf_counter() - started, 1)
+                self._observed_library_signature = signature_after
+                if self._thread is threading.current_thread():
+                    self._thread = None
         except Exception as error:  # surface in /api/health, never crash the service
             with self.lock:
                 self.error = f"{type(error).__name__}"
+                self.ready = False
+                self._observed_library_signature = self._library_signature()
+                if self._thread is threading.current_thread():
+                    self._thread = None
 
     def status(self) -> dict:
+        self._refresh_if_library_changed()
         library_entries = 0
         if self.library_path:
             try:
@@ -152,18 +217,25 @@ class Hatchery:
         for sid in expired:
             del self.sessions[sid]
 
+    def _require_ready_locked(self) -> None:
+        if self.error:
+            raise TierError("report cards are unavailable: warm-up failed; the operator has been notified")
+        if not self.ready:
+            STATS.bump("report_card.refused_warming")
+            raise TierError("the exam hatchery is still warming up; retry in about a minute", retryable=True)
+
     def start_session(self, client_ip: str) -> dict:
+        self._refresh_if_library_changed()
         with self.lock:
-            if self.error:
-                raise TierError("report cards are unavailable: warm-up failed; the operator has been notified")
-            if not self.ready:
-                STATS.bump("report_card.refused_warming")
-                raise TierError("the exam hatchery is still warming up; retry in about a minute", retryable=True)
+            self._require_ready_locked()
         if not REPORT_START_LIMIT.allow(client_ip):
             STATS.bump("report_card.refused_limit")
             raise TierError("report-card session limit reached for this address; try again later")
         now = time.time()
         with self.lock:
+            # A health poll can notice a forge sync and start a refresh between
+            # the first readiness check and rate limiting.
+            self._require_ready_locked()
             self._sweep_locked(now)
             if len(self.sessions) >= self.max_active_sessions:
                 raise TierError("too many live sessions right now; retry shortly", retryable=True)
@@ -191,6 +263,9 @@ class Hatchery:
                 served.append({"item_id": public_id, "domain": name, "prompt": repair_item_prompt(item)})
             self.sessions[session_id] = {
                 "items": item_map,
+                # A refresh may swap self.pools while this session is live.
+                # Pin the exact pool snapshot that certified its master items.
+                "pools": self.pools,
                 "created_at": now,
                 "expires_at": now + self.session_ttl,
                 "client_ip": client_ip,
@@ -224,7 +299,6 @@ class Hatchery:
         with self.lock:
             self._sweep_locked(now)
             session = self.sessions.pop(session_id, None)  # one-shot: gone even if grading fails
-            pools = self.pools
         if session is None:
             raise TierError("unknown or expired session (sessions are one-shot and time out)")
         if not GRADE_SLOT.acquire(blocking=False):
@@ -259,7 +333,7 @@ class Hatchery:
             elif isinstance(raw, dict) and isinstance(raw.get("repair_expression"), str):
                 expression = raw["repair_expression"]
             ok = bool(expression) and grade_repair_answer(
-                item, expression, max_n=self.max_n, pool=self.pools[domain_name]
+                item, expression, max_n=self.max_n, pool=session["pools"][domain_name]
             )
             row = {
                 "item_id": public_id,

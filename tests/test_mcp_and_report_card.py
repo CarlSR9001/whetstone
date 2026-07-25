@@ -192,6 +192,16 @@ def test_expired_sessions_are_swept(warm_hatchery):
         warm_hatchery.submit(session["session_id"], {}, ip)
 
 
+def test_status_sweeps_expired_sessions_without_start_or_submit():
+    instance = Hatchery()
+    instance.sessions["expired"] = {"expires_at": 0.0}
+
+    status = instance.status()
+
+    assert status["active_sessions"] == 0
+    assert instance.sessions == {}
+
+
 def test_session_cap_is_enforced(warm_hatchery):
     original_cap = warm_hatchery.max_active_sessions
     warm_hatchery.max_active_sessions = len(warm_hatchery.sessions) + 1

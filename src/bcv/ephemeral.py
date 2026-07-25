@@ -201,6 +201,7 @@ class Hatchery:
             except OSError:
                 library_entries = 0
         with self.lock:
+            self._sweep_locked(time.time())
             return {
                 "ready": self.ready,
                 "error": self.error,

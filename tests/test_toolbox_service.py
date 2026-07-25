@@ -76,7 +76,7 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["stateless"] is True
     assert payload["private_bank_loaded"] is False
     assert payload["tools"] == 8
-    assert payload["version"] == __version__ == "0.5.0"
+    assert payload["version"] == __version__ == "0.5.1"
     assert payload["build_commit"] == "development"
     assert payload["mcp_endpoint"] == "/mcp"
     assert payload["report_card"]["ready"] is False  # make_server never warms the hatchery

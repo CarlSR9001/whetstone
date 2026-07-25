@@ -3,6 +3,7 @@
 deploy/* text eol=lf
 .github/actions/**/*.yml text eol=lf
 .github/workflows/**/*.yml text eol=lf
+*.json text eol=lf
 *.png binary
 *.zip binary
 src/bcv/_version.py export-subst

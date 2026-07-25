@@ -33,8 +33,8 @@
   },
   "source": "sanitized committed receipts; no private item content",
   "source_receipts_sha256": {
-    "cross_scale_ladder_receipt.json": "9533a409c83b479b70267b41784c1574fa6e99c9e7ba260698ea6c4d24b36be3",
-    "redteam_gate_receipt.json": "e345cf4f9b34d00c4e7060437826b92a1ded32cbc3553c29044f3f8275e33293",
-    "relevance_eval_report.json": "93daa31acf53a8ceaf4d8cefb56ca6866440779a9f76d5159e6f935cd0570605"
+    "cross_scale_ladder_receipt.json": "13d7722b9fd5ca4f81a3a5fef0f8db7d6e299398c7778a5d058eaac89a511ed4",
+    "redteam_gate_receipt.json": "97922fa64be69d943b300a953a29b568658bf7edb657d0e598e653bc60d7397f",
+    "relevance_eval_report.json": "250afeb82319e9998f1fbded51b661152f79d5992985745e804fd50db29ec85b"
   }
 }

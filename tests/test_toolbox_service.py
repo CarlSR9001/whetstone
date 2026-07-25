@@ -120,7 +120,10 @@ def test_packaged_evidence_matches_source_receipts():
         for name in evidence["source_receipts_sha256"]
     }
     for name, expected in evidence["source_receipts_sha256"].items():
-        assert hashlib.sha256((root / "results" / name).read_bytes()).hexdigest() == expected
+        # Git stores these text receipts with LF. Windows may materialize a
+        # CRLF checkout, so hash canonical repository bytes, not host newlines.
+        canonical = (root / "results" / name).read_bytes().replace(b"\r\n", b"\n")
+        assert hashlib.sha256(canonical).hexdigest() == expected
 
     relevance = receipts["relevance_eval_report.json"]
     ladder = receipts["cross_scale_ladder_receipt.json"]

@@ -1,6 +1,8 @@
 .bcv_runs/
 __pycache__/
 .pytest_cache/
+.pytest-tmp*/
+.venv*/
 *.pyc
 *.egg-info/
 tools/

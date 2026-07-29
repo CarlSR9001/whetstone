@@ -8,7 +8,7 @@ from bcv._version import ReleaseIdentityError, __version__, build_commit
 
 def test_release_version_and_development_provenance(monkeypatch):
     monkeypatch.delenv("WHETSTONE_BUILD_COMMIT", raising=False)
-    assert __version__ == "0.5.2"
+    assert __version__ == "0.5.3"
     assert build_commit() == "development"
 
 

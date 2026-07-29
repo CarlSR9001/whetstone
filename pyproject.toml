@@ -17,7 +17,7 @@ dependencies = []
 
 [project.optional-dependencies]
 agents = [
-  "mcp>=1.0",
+  "mcp>=2,<3",
 ]
 engines = [
   "python-chess>=1.999",
@@ -30,7 +30,7 @@ local-models = [
   "sentencepiece",
 ]
 all = [
-  "mcp>=1.0",
+  "mcp>=2,<3",
   "python-chess>=1.999",
   "torch",
   "transformers",
@@ -41,7 +41,7 @@ all = [
 test = [
   "build>=1.2",
   "pytest>=8",
-  "mcp>=1.0",
+  "mcp>=2,<3",
   "python-chess>=1.999",
   "torch",
   "transformers",

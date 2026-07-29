@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import json
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
-mcp = FastMCP("reasoning-emulator")
+from bcv._version import __version__
+
+mcp = MCPServer("reasoning-emulator", version=__version__)
 
 _SESSIONS: dict[str, object] = {}
 _CLIENT = None

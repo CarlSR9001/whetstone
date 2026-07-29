@@ -26,9 +26,11 @@ import json
 import os
 import shlex
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
-mcp = FastMCP("whetstone")
+from bcv._version import __version__
+
+mcp = MCPServer("whetstone", version=__version__)
 
 _BANK_ROOT = os.environ.get("WHETSTONE_ROOT", ".bcv_runs/examiner")
 

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
+import tomllib
+from pathlib import Path
 
 import pytest
+from mcp import Client
 
 import bcv.whetstone_mcp as wmcp
+from bcv._version import __version__
 
 GOOD_BALANCED = """
 def balanced(s):
@@ -79,24 +84,45 @@ def test_mint_rejects_unknown_domain(bank_root):
         wmcp.mint_impl("astrology")
 
 
-def test_no_tool_serves_item_contents():
+def test_no_tool_serves_item_contents(bank_root):
     """The boundary as a test: no registered MCP tool name suggests item access,
     and no tool result in the happy path contains a prompt payload."""
-    tool_names = set()
-    manager = getattr(wmcp.mcp, "_tool_manager", None)
-    if manager is not None:
-        tool_names = set(getattr(manager, "_tools", {}).keys())
-    assert tool_names, "expected registered tools on the FastMCP instance"
-    forbidden = {"item", "prompt", "exam_content", "payload"}
+    async def inspect_surface():
+        async with Client(wmcp.mcp) as client:
+            tools = await client.list_tools()
+            status = await client.call_tool("whetstone_status", {})
+            return tools, status
+
+    tools, status = asyncio.run(inspect_surface())
+    tool_names = {tool.name for tool in tools.tools}
+    assert tools.meta["io.modelcontextprotocol/serverInfo"] == {
+        "name": "whetstone",
+        "version": __version__,
+    }
+    assert status.is_error is False
+    assert json.loads(status.content[0].text)["root"] == bank_root
     for name in tool_names:
         assert not any(word in name for word in ("items", "prompts")), name
     assert "whetstone_status" in tool_names
     assert "whetstone_gate" in tool_names
 
 
-def test_calibrate_panel_via_mcp():
-    from pathlib import Path
+def test_reasoning_emulator_registers_with_mcp_v2():
+    from bcv import emulator_mcp
 
+    tools = asyncio.run(emulator_mcp.mcp.list_tools())
+    tool_names = {tool.name for tool in tools}
+    assert {"emu_start", "emu_step", "emu_status", "emu_check", "emu_result"} <= tool_names
+
+
+def test_package_requires_mcp_v2():
+    project = tomllib.loads((Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8"))
+    extras = project["project"]["optional-dependencies"]
+    for extra in ("agents", "all", "test"):
+        assert [requirement for requirement in extras[extra] if requirement.startswith("mcp")] == ["mcp>=2,<3"]
+
+
+def test_calibrate_panel_via_mcp():
     labeled = Path(__file__).resolve().parent.parent / "sample_docs" / "support_calibration.jsonl"
     result = wmcp.calibrate_panel_impl(str(labeled))
     assert result["false_accepts"] == 0

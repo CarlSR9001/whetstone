@@ -19,10 +19,20 @@ import bcv.ephemeral as ephemeral
 from bcv._version import __version__
 from bcv.ephemeral import Hatchery, TierError
 from bcv.mcp_service import handle_mcp
-from bcv.product_tools import examples, gate_results
+from bcv.product_tools import examples, gate_results, input_schemas
 from bcv.toolbox_service import make_server
 
 _IP = (f"10.0.0.{n}" for n in itertools.count(1))
+TIER0_EXAMPLES = {
+    "inspect_promotion": "inspector",
+    "audit_leakage": "leakage",
+    "promotion_gate": "gate",
+    "bank_health": "health",
+    "safe_patch": "safepatch",
+    "counterexample_hunt": "counterexample",
+    "memory_relevance": "memory",
+    "replay_trace": "replay",
+}
 
 
 def rpc(method: str, params: dict | None = None, request_id: int | None = 1) -> dict:
@@ -32,6 +42,55 @@ def rpc(method: str, params: dict | None = None, request_id: int | None = 1) -> 
     if params is not None:
         message["params"] = params
     return message
+
+
+def assert_matches_schema(value, schema: dict, path: str = "$") -> None:
+    """Validate the JSON-Schema subset used by the public tool contracts."""
+    expected = schema.get("type")
+    if expected == "object":
+        assert isinstance(value, dict), f"{path} must be an object"
+        required = set(schema.get("required", ()))
+        assert required <= set(value), f"{path} is missing {sorted(required - set(value))}"
+        properties = schema.get("properties", {})
+        additional = schema.get("additionalProperties", True)
+        if additional is False:
+            assert set(value) <= set(properties), f"{path} has undeclared keys {sorted(set(value) - set(properties))}"
+        for key, item in value.items():
+            if key in properties:
+                assert_matches_schema(item, properties[key], f"{path}.{key}")
+            elif isinstance(additional, dict):
+                assert_matches_schema(item, additional, f"{path}.{key}")
+        if "minProperties" in schema:
+            assert len(value) >= schema["minProperties"], f"{path} has too few properties"
+        if "maxProperties" in schema:
+            assert len(value) <= schema["maxProperties"], f"{path} has too many properties"
+    elif expected == "array":
+        assert isinstance(value, list), f"{path} must be an array"
+        if "minItems" in schema:
+            assert len(value) >= schema["minItems"], f"{path} has too few items"
+        if "maxItems" in schema:
+            assert len(value) <= schema["maxItems"], f"{path} has too many items"
+        for index, item in enumerate(value):
+            assert_matches_schema(item, schema["items"], f"{path}[{index}]")
+    elif expected == "string":
+        assert isinstance(value, str), f"{path} must be a string"
+        if "minLength" in schema:
+            assert len(value) >= schema["minLength"], f"{path} is too short"
+        if "maxLength" in schema:
+            assert len(value) <= schema["maxLength"], f"{path} is too long"
+    elif expected == "integer":
+        assert isinstance(value, int) and not isinstance(value, bool), f"{path} must be an integer"
+    elif expected == "number":
+        assert isinstance(value, (int, float)) and not isinstance(value, bool), f"{path} must be numeric"
+    elif expected == "boolean":
+        assert isinstance(value, bool), f"{path} must be boolean"
+
+    if "minimum" in schema:
+        assert value >= schema["minimum"], f"{path} is below minimum"
+    if "exclusiveMinimum" in schema:
+        assert value > schema["exclusiveMinimum"], f"{path} is below exclusive minimum"
+    if "maximum" in schema:
+        assert value <= schema["maximum"], f"{path} is above maximum"
 
 
 @pytest.fixture(scope="module")
@@ -107,7 +166,7 @@ def test_unknown_method_and_unknown_tool():
     assert body["error"]["code"] == -32602
 
 
-def test_tools_list_has_both_tiers_and_object_schemas():
+def test_tools_list_has_both_tiers_and_truthful_object_schemas():
     status, body = handle_mcp(rpc("tools/list"), next(_IP))
     tools = {tool["name"]: tool for tool in body["result"]["tools"]}
     assert {"promotion_gate", "audit_leakage", "inspect_promotion", "bank_health",
@@ -115,6 +174,15 @@ def test_tools_list_has_both_tiers_and_object_schemas():
             "report_card_start", "report_card_submit", "about_whetstone"} <= set(tools)
     for tool in tools.values():
         assert tool["inputSchema"]["type"] == "object"
+    for tool_name, example_name in TIER0_EXAMPLES.items():
+        schema = tools[tool_name]["inputSchema"]
+        assert schema == input_schemas()[tool_name]
+        assert schema["required"], f"{tool_name} must advertise its required inputs"
+        assert schema["additionalProperties"] is False
+        assert_matches_schema(examples()[example_name], schema)
+    counterexample = tools["counterexample_hunt"]["inputSchema"]
+    assert counterexample["required"] == ["expression"]
+    assert counterexample["properties"]["expression"]["minLength"] == 1
     # No surface lists or serves private items; the tool names must not suggest one.
     assert not any("item" in name and "list" in name for name in tools)
 
@@ -130,6 +198,23 @@ def test_gate_tool_matches_rest_result_exactly():
     assert result["isError"] is False
     assert result["structuredContent"]["verdict"] == direct["verdict"]
     assert json.loads(result["content"][0]["text"])["verdict"] == direct["verdict"]
+
+
+def test_every_advertised_tier_zero_example_executes_without_input_error():
+    payloads = examples()
+    for tool_name, example_name in TIER0_EXAMPLES.items():
+        payload = dict(payloads[example_name])
+        if tool_name == "counterexample_hunt":
+            payload.update({"ns": [8], "restarts": 1, "steps": 50, "seed": 0})
+        status, body = handle_mcp(
+            rpc("tools/call", {"name": tool_name, "arguments": payload}),
+            next(_IP),
+        )
+        assert status == 200
+        assert body["result"]["isError"] is False, (
+            tool_name,
+            body["result"]["content"][0]["text"],
+        )
 
 
 def test_bad_tool_input_is_a_tool_failure_not_a_protocol_error():
@@ -301,6 +386,10 @@ def test_discovery_surfaces(toolbox_url):
     assert spec["openapi"].startswith("3.1")
     assert "/api/gate" in spec["paths"] and "/mcp" in spec["paths"]
     assert spec["paths"]["/api/gate"]["post"]["requestBody"]["content"]["application/json"]["example"]
+    assert (
+        spec["paths"]["/api/gate"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+        == input_schemas()["promotion_gate"]
+    )
 
     for manifest_path in ("/.well-known/mcp.json", "/mcp.json"):
         manifest = json.loads(urllib.request.urlopen(toolbox_url + manifest_path, timeout=5).read())

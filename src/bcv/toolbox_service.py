@@ -31,6 +31,7 @@ from bcv.product_tools import (
     examples,
     gate_results,
     hunt_counterexample,
+    input_schemas,
     inspect_promotion,
     memory_relevance,
     replay_trace,
@@ -158,6 +159,7 @@ def _mcp_manifest() -> dict:
 
 def _openapi_spec() -> dict:
     example_payloads = examples()
+    schemas = input_schemas()
     paths: dict = {
         "/api/health": {"get": {"operationId": "health", "summary": "Service health, version, and report-card readiness.", "responses": {"200": {"description": "OK"}}}},
         "/api/catalog": {"get": {"operationId": "listTools", "summary": "Catalog of the eight stateless verifier tools.", "responses": {"200": {"description": "OK"}}}},
@@ -167,12 +169,18 @@ def _openapi_spec() -> dict:
     }
     for tool in catalog():
         example = example_payloads.get(tool["id"])
+        schema = schemas[REST_TOOL_NAMES[tool["endpoint"]]]
         operation = {
             "operationId": tool["id"],
             "summary": tool["promise"],
             "requestBody": {
                 "required": True,
-                "content": {"application/json": ({"example": example} if example else {})},
+                "content": {
+                    "application/json": {
+                        "schema": schema,
+                        **({"example": example} if example else {}),
+                    }
+                },
             },
             "responses": {
                 "200": {"description": "Deterministic receipt with item-level decision path and SHA-256 hashes."},

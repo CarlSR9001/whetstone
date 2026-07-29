@@ -28,6 +28,7 @@ from bcv.product_tools import (
     catalog,
     gate_results,
     hunt_counterexample,
+    input_schemas,
     inspect_promotion,
     memory_relevance,
     replay_trace,
@@ -54,10 +55,6 @@ INSTRUCTIONS = (
 )
 
 
-def _loose_object_schema(description: str) -> dict:
-    return {"type": "object", "description": description, "additionalProperties": True}
-
-
 def _hunt_with_limits(payload: dict, client_ip: str) -> dict:
     if not HUNTER_LIMIT.allow(client_ip):
         raise TierError("counterexample search limit exceeded for this address; try again later")
@@ -81,58 +78,59 @@ def _report_card_submit(payload: dict, client_ip: str) -> dict:
 
 
 # name -> (handler(payload, client_ip), description, inputSchema)
+TIER0_INPUT_SCHEMAS = input_schemas()
 TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
     "inspect_promotion": (
         lambda p, ip: inspect_promotion(p),
         "Quarantine declared exposure, compare paired baseline/candidate outcomes on the "
         "clean remainder, and issue a promotion receipt. Bring your own exam rows, exposure "
         "records, and per-item results. Full example: GET /api/examples key 'inspector'.",
-        _loose_object_schema("Keys: exam, exposure, baseline, candidate, baseline_name, candidate_name, policy."),
+        TIER0_INPUT_SCHEMAS["inspect_promotion"],
     ),
     "audit_leakage": (
         lambda p, ip: audit_leakage(p),
         "Exact declared-exposure audit over your exam rows: row identity, behavioral "
         "fingerprints for graph-DSL expressions, text-similarity review flags, and a clean "
         "exam export. Full example: GET /api/examples key 'leakage'.",
-        _loose_object_schema("Keys: exam, exposure, fingerprint_max_n, similarity_threshold."),
+        TIER0_INPUT_SCHEMAS["audit_leakage"],
     ),
     "promotion_gate": (
         lambda p, ip: gate_results(p),
         "PASS, HOLD, or BLOCK from paired per-item results: gains, regressions, exact "
         "McNemar p-value, per-domain breakdown. Full example: GET /api/examples key 'gate'.",
-        _loose_object_schema("Keys: baseline, candidate, domains, baseline_name, candidate_name, policy."),
+        TIER0_INPUT_SCHEMAS["promotion_gate"],
     ),
     "bank_health": (
         lambda p, ip: bank_health(p),
         "Item-lifecycle diagnostics over your grading history: discriminators, saturated and "
         "flaky items, frontier gaps. Full example: GET /api/examples key 'health'.",
-        _loose_object_schema("Keys: items, history."),
+        TIER0_INPUT_SCHEMAS["bank_health"],
     ),
     "safe_patch": (
         lambda p, ip: safe_patch(p),
         "Apply a section-scoped Markdown patch under conservation checks (untouched sections "
         "stay byte-identical; protected tokens preserved). Full example: GET /api/examples "
         "key 'safepatch'.",
-        _loose_object_schema("Keys: document, reason, operations."),
+        TIER0_INPUT_SCHEMAS["safe_patch"],
     ),
     "counterexample_hunt": (
         _hunt_with_limits,
         "Bounded simulated-annealing search for a graph counterexample inside a DSL "
         "predicate class, with an exact certificate when found. CPU-bounded and strictly "
         "rate-limited. Full example: GET /api/examples key 'counterexample'.",
-        _loose_object_schema("Keys: expression, ns, restarts, steps, seed."),
+        TIER0_INPUT_SCHEMAS["counterexample_hunt"],
     ),
     "memory_relevance": (
         lambda p, ip: memory_relevance(p),
         "Compare query-free salience against objective-conditioned relevance for a set of "
         "memories under a token budget. Full example: GET /api/examples key 'memory'.",
-        _loose_object_schema("Keys: objective, objective_entities, context_entities, token_budget, memories."),
+        TIER0_INPUT_SCHEMAS["memory_relevance"],
     ),
     "replay_trace": (
         lambda p, ip: replay_trace(p),
         "Turn reasoning-emulator control events into checkpoints, rewinds, notes, and a "
         "timeline. Full example: GET /api/examples key 'replay'.",
-        _loose_object_schema("Keys: events, notes."),
+        TIER0_INPUT_SCHEMAS["replay_trace"],
     ),
     "report_card_start": (
         _report_card_start,

@@ -1278,6 +1278,300 @@ def hunt_counterexample(payload: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _record_array_schema(
+    description: str,
+    *,
+    min_items: int = 0,
+    max_items: int = MAX_RECORDS,
+    item_properties: dict[str, Any] | None = None,
+    item_required: tuple[str, ...] = (),
+    item_additional_properties: bool = True,
+) -> dict[str, Any]:
+    item_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": item_properties or {},
+        "additionalProperties": item_additional_properties,
+    }
+    if item_required:
+        item_schema["required"] = list(item_required)
+    return {
+        "type": "array",
+        "description": description,
+        "items": item_schema,
+        "minItems": min_items,
+        "maxItems": max_items,
+    }
+
+
+def _string_array_schema(description: str, *, max_items: int = 100) -> dict[str, Any]:
+    return {
+        "type": "array",
+        "description": description,
+        "items": {"type": "string"},
+        "maxItems": max_items,
+    }
+
+
+def _result_map_schema(label: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": f"item_id -> boolean pass/fail result for the {label} system.",
+        "minProperties": 1,
+        "maxProperties": MAX_RECORDS,
+        "additionalProperties": {"type": "boolean"},
+    }
+
+
+def _policy_input_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Explicit promotion policy. Omitted fields use the documented defaults.",
+        "properties": {
+            "min_gains": {"type": "integer", "minimum": 0, "default": 1},
+            "max_regressions": {"type": "integer", "minimum": 0, "default": 0},
+            "confidence_alpha": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "default": 0.05,
+            },
+            "require_retained_probe": {"type": "boolean", "default": False},
+        },
+        "additionalProperties": False,
+    }
+
+
+def _retained_probe_input_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Optional retained-capability result checked alongside the paired cohort.",
+        "properties": {
+            "base_verified": {"type": "integer", "minimum": 0},
+            "candidate_verified": {"type": "integer", "minimum": 0},
+            "items": {"type": "integer", "minimum": 0},
+        },
+        "required": ["base_verified", "candidate_verified", "items"],
+        "additionalProperties": False,
+    }
+
+
+def input_schemas() -> dict[str, dict[str, Any]]:
+    """Canonical machine contracts for the eight public Tier 0 tools.
+
+    The runtime accepts a few convenience encodings such as JSONL strings, but
+    MCP and OpenAPI advertise one narrow, typed JSON form that every client can
+    construct without following an out-of-band example link.
+    """
+    exam_schema = _record_array_schema(
+        "Exam rows. Each row needs item_id (or id) plus prompt/content/input/task/question/expression.",
+        min_items=1,
+    )
+    exposure_schema = _record_array_schema(
+        "Declared exposure rows carrying identity/content fields and an optional source or path."
+    )
+    leakage_properties: dict[str, Any] = {
+        "exam": exam_schema,
+        "exposure": exposure_schema,
+        "fingerprint_max_n": {"type": "integer", "minimum": 3, "maximum": 5, "default": 4},
+        "similarity_threshold": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 1,
+            "default": 0.6,
+        },
+        "enable_text_similarity": {"type": "boolean", "default": True},
+        "enable_behavioral_fingerprint": {"type": "boolean", "default": True},
+    }
+    gate_properties: dict[str, Any] = {
+        "baseline": _result_map_schema("baseline"),
+        "candidate": _result_map_schema("candidate"),
+        "domains": {
+            "type": "object",
+            "description": "Optional item_id -> domain label mapping.",
+            "additionalProperties": {"type": "string"},
+        },
+        "baseline_name": {"type": "string", "default": "baseline"},
+        "candidate_name": {"type": "string", "default": "candidate"},
+        "policy": _policy_input_schema(),
+        "retained_probe": _retained_probe_input_schema(),
+    }
+    operation_schema = {
+        "target_heading": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Markdown heading text without the leading # characters.",
+        },
+        "find": {"type": "string", "minLength": 1},
+        "replace": {"type": "string"},
+        "allow_token_changes": _string_array_schema(
+            "Protected literal tokens that this operation may intentionally change."
+        ),
+    }
+    memory_properties = {
+        "content": {"type": "string", "minLength": 1},
+        "entities": _string_array_schema("Entities explicitly present in this memory."),
+        "kind": {"type": "string", "default": "episodic"},
+        "source": {"type": "string", "default": "uploaded"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.8},
+        "age": {"type": "integer", "minimum": 0, "default": 0},
+        "use_count": {"type": "integer", "minimum": 0, "default": 0},
+    }
+    event_properties = {
+        "step": {"type": "integer", "minimum": 0},
+        "kind": {
+            "type": "string",
+            "description": "Event class such as control, verifier, model, or observation.",
+        },
+        "detail": {"type": "string"},
+        "source": {"type": "string", "default": "native"},
+    }
+    return {
+        "inspect_promotion": {
+            "type": "object",
+            "description": "Audit exposure, prove a complete clean cohort, then gate baseline versus candidate.",
+            "properties": {**leakage_properties, **gate_properties},
+            "required": ["exam", "baseline", "candidate"],
+            "additionalProperties": False,
+        },
+        "audit_leakage": {
+            "type": "object",
+            "description": "Audit declared exposure against an exam and export the clean remainder.",
+            "properties": leakage_properties,
+            "required": ["exam"],
+            "additionalProperties": False,
+        },
+        "promotion_gate": {
+            "type": "object",
+            "description": "Compare identical baseline and candidate item cohorts under an explicit policy.",
+            "properties": gate_properties,
+            "required": ["baseline", "candidate"],
+            "additionalProperties": False,
+        },
+        "bank_health": {
+            "type": "object",
+            "description": "Diagnose item lifecycle health from one or more grading-history rows.",
+            "properties": {
+                "items": _record_array_schema(
+                    "Optional item definitions.",
+                    item_properties={
+                        "item_id": {"type": "string", "minLength": 1},
+                        "domain": {"type": "string"},
+                    },
+                    item_required=("item_id",),
+                ),
+                "history": _record_array_schema(
+                    "Observed item/system outcomes.",
+                    min_items=1,
+                    item_properties={
+                        "item_id": {"type": "string", "minLength": 1},
+                        "system": {"type": "string", "minLength": 1},
+                        "passed": {"type": "boolean"},
+                        "domain": {"type": "string"},
+                    },
+                    item_required=("item_id", "system", "passed"),
+                ),
+            },
+            "required": ["history"],
+            "additionalProperties": False,
+        },
+        "safe_patch": {
+            "type": "object",
+            "description": "Apply deterministic, section-scoped Markdown replacements under conservation checks.",
+            "properties": {
+                "document": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": MAX_MARKDOWN_CHARS,
+                    "description": "Complete Markdown document to patch.",
+                },
+                "reason": {"type": "string"},
+                "operations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": operation_schema,
+                        "required": ["target_heading", "find", "replace"],
+                        "additionalProperties": False,
+                    },
+                    "minItems": 1,
+                    "maxItems": 50,
+                },
+            },
+            "required": ["document", "operations"],
+            "additionalProperties": False,
+        },
+        "counterexample_hunt": {
+            "type": "object",
+            "description": "Run a bounded graph search against one Whetstone predicate expression.",
+            "properties": {
+                "expression": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": (
+                        "Graph predicate in the Whetstone DSL, for example: "
+                        "is_connected and is_triangle_free and not is_bipartite"
+                    ),
+                },
+                "ns": {
+                    "type": "array",
+                    "description": "Graph sizes searched.",
+                    "items": {"type": "integer", "minimum": 4, "maximum": 12},
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "default": [8, 9, 10, 11],
+                },
+                "restarts": {"type": "integer", "minimum": 1, "maximum": 6, "default": 4},
+                "steps": {"type": "integer", "minimum": 50, "maximum": 1500, "default": 800},
+                "seed": {"type": "integer", "default": 0},
+            },
+            "required": ["expression"],
+            "additionalProperties": False,
+        },
+        "memory_relevance": {
+            "type": "object",
+            "description": "Rank caller-supplied memories against a concrete objective under a token budget.",
+            "properties": {
+                "objective": {"type": "string", "minLength": 1},
+                "objective_entities": _string_array_schema(
+                    "Optional explicit entities when the objective text is not self-describing."
+                ),
+                "context_entities": _string_array_schema("Entities already active in context."),
+                "token_budget": {"type": "integer", "minimum": 1, "maximum": 10_000, "default": 90},
+                "current_step": {"type": "integer", "minimum": 0},
+                "question_kind": {"type": "string", "default": "generic"},
+                "memories": _record_array_schema(
+                    "Memories to rank.",
+                    min_items=1,
+                    max_items=1_000,
+                    item_properties=memory_properties,
+                    item_required=("content",),
+                    item_additional_properties=False,
+                ),
+            },
+            "required": ["objective", "memories"],
+            "additionalProperties": False,
+        },
+        "replay_trace": {
+            "type": "object",
+            "description": "Reconstruct checkpoints, rewinds, branches, and verifier outcomes from control events.",
+            "properties": {
+                "events": _record_array_schema(
+                    "Ordered reasoning-emulator events.",
+                    min_items=1,
+                    max_items=MAX_EVENT_RECORDS,
+                    item_properties=event_properties,
+                    item_required=("kind", "detail"),
+                    item_additional_properties=False,
+                ),
+                "notes": _string_array_schema("Optional analyst notes.", max_items=MAX_EVENT_RECORDS),
+            },
+            "required": ["events"],
+            "additionalProperties": False,
+        },
+    }
+
+
 def examples() -> dict[str, Any]:
     prompts = (
         "Repair a Python retry loop without changing its public return type.",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 # ``git archive`` expands this value when ``export-subst`` is set for this
 # file. Wheel/editable installs fall back to an explicit deployment variable.

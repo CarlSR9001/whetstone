@@ -14,7 +14,8 @@ Design constraints, in order:
 
 Tracked: unique and repeat clients, calls per tool per transport (rest/mcp),
 report-card funnel (sessions started / graded / items passed / retention
-buckets), error categories, and abuse-shaped refusals (rate limits,
+buckets), Open Promotion Bench sessions/grades/verdicts/publications, error
+categories, and abuse-shaped refusals (rate limits,
 cross-origin, malformed JSON-RPC, unknown tools, oversized bodies).
 """
 
@@ -150,6 +151,7 @@ class Stats:
                 "tool_calls": {name: dict(counts) for name, counts in sorted(tools.items())},
                 "outcomes": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("outcome.")},
                 "report_card": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("report_card.")},
+                "open_bench": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("open_bench.")},
                 "refusals": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("refused.")},
                 "mcp": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("mcp.")},
             }

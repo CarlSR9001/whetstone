@@ -1,9 +1,11 @@
-"""Public, stateless HTTP shell for the Whetstone product tools.
+"""Public HTTP shell for Whetstone's stateless tools and open benchmark.
 
-The service binds to loopback by default, accepts bounded JSON requests, never
-persists request bodies or results, and never opens an examiner bank. It does
-retain privacy-preserving operational counters; Nginx supplies TLS, access
-logging, and an additional rate limit in production.
+The service binds to loopback by default, accepts bounded JSON requests,
+persists no workbench/report-card request bodies or results, and never opens an
+examiner bank. It retains privacy-preserving operational counters; Open
+Promotion Bench separately persists only opt-in public manifests and sanitized
+receipts, never task contents or answers. Nginx supplies TLS, access logging,
+and an additional rate limit in production.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from pathlib import Path
 from bcv._version import __version__, build_commit
 from bcv.ephemeral import ensure_started, hatchery
 from bcv.mcp_service import handle_mcp
+from bcv.open_bench import OpenBenchError, open_bench
 from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
 from bcv.stats import STATS
 from bcv.product_tools import (
@@ -93,8 +96,9 @@ def _llms_body() -> str:
     return (
         "# Whetstone Tools\n\n"
         "> Verifier-grounded evaluation tools for AI systems, callable by agents over MCP or REST. "
-        "Stateless requests, no auth, request payloads and results are not persisted, "
-        "no private exam bank loaded. "
+        "Workbench and report-card requests are stateless: payloads and results are not persisted. "
+        "Open Promotion Bench stores only opt-in public manifests and sanitized receipts, never tasks "
+        "or answers. No auth and no private exam bank loaded. "
         "Operational counters and standard access logs are retained.\n\n"
         "Whetstone decides whether a new agent/model version genuinely improved: exposure quarantine, "
         "paired promotion gates (PASS/HOLD/BLOCK with an exact McNemar test), leakage audits, bank "
@@ -108,6 +112,7 @@ def _llms_body() -> str:
         f"- Skill file (Anthropic Skills format, full instructions): {CANONICAL}/skill.md\n"
         f"- Agent documentation page: {CANONICAL}/for-agents\n"
         f"- Tool catalog: {CANONICAL}/api/catalog\n"
+        f"- Open Promotion Bench: {CANONICAL}/benchmark\n"
         "- Source (AGPL-3.0): https://github.com/CarlSR9001/whetstone\n\n"
         "## Tiers\n\n"
         "- Tier 0 (stateless): you supply exam rows, paired results, documents, or event logs; you get "
@@ -117,7 +122,10 @@ def _llms_body() -> str:
         "- Tier 1 (report card): report_card_start hands your agent a disposable 6-item graph-repair "
         "exam; report_card_submit grades it by checker spec (any verified strict refinement passes; no "
         "answer key exists), reports support-retention diagnostics, and destroys the one-shot session. "
-        "Items are minted from the public frontier: a demonstration, not a credential.\n\n"
+        "Items are minted from the public frontier: a demonstration, not a credential.\n"
+        "- Tier 2 (open benchmark): open_bench_start issues six fresh scope-integrity tasks for "
+        "a baseline and candidate; open_bench_submit counts gains and regressions and may publish "
+        "a sanitized self-attested receipt; open_bench_leaderboard reads the public board.\n\n"
         "## Limits\n\n"
         "~60 req/min general; 4 report-card sessions + 8 submits per hour per address; counterexample "
         "hunts 4 per 10 min behind one worker; report card warms ~2 min after restart (GET /api/health "
@@ -126,7 +134,7 @@ def _llms_body() -> str:
 
 
 def _sitemap_xml() -> str:
-    pages = ("/", "/for-agents", "/skill.md", "/llms.txt", "/llms-full.txt", "/openapi.json")
+    pages = ("/", "/benchmark", "/for-agents", "/skill.md", "/llms.txt", "/llms-full.txt", "/openapi.json")
     entries = "\n".join(f"  <url><loc>{CANONICAL}{page}</loc></url>" for page in pages)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -142,7 +150,7 @@ def _mcp_manifest() -> dict:
         "build_commit": build_commit(),
         "description": (
             "Promotion gate for AI agents: leakage audits, PASS/HOLD/BLOCK verdicts with exact "
-            "statistics, and a disposable report card that grades the connecting agent by checker spec."
+            "statistics, a disposable report card, and a paired public scope-integrity benchmark."
         ),
         "endpoint": f"{CANONICAL}/mcp",
         "transport": "streamable-http",
@@ -165,7 +173,11 @@ def _openapi_spec() -> dict:
         "/api/catalog": {"get": {"operationId": "listTools", "summary": "Catalog of the eight stateless verifier tools.", "responses": {"200": {"description": "OK"}}}},
         "/api/examples": {"get": {"operationId": "getExamples", "summary": "A complete, valid request payload for every tool.", "responses": {"200": {"description": "OK"}}}},
         "/api/stats": {"get": {"operationId": "getStats", "summary": "Aggregate, privacy-preserving usage counters.", "responses": {"200": {"description": "OK"}}}},
-        "/mcp": {"post": {"operationId": "mcp", "summary": "MCP endpoint (Streamable HTTP, stateless JSON-RPC 2.0). Tools include the Tier 0 set plus report_card_start / report_card_submit.", "responses": {"200": {"description": "JSON-RPC response"}}}},
+        "/api/open-bench/leaderboard": {"get": {"operationId": "openBenchLeaderboard", "summary": "Opt-in, self-attested public Open Promotion Bench receipts.", "responses": {"200": {"description": "OK"}}}},
+        "/api/open-bench/receipt/{public_id}": {"get": {"operationId": "openBenchReceipt", "summary": "One sanitized public benchmark receipt.", "parameters": [{"name": "public_id", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}, "404": {"description": "Not found"}}}},
+        "/api/open-bench/start": {"post": {"operationId": "openBenchStart", "summary": "Start a paired six-item scope-integrity cohort.", "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": False}}}}, "responses": {"200": {"description": "One-shot session and tasks"}, "429": {"description": "Rate limited"}}}},
+        "/api/open-bench/submit": {"post": {"operationId": "openBenchSubmit", "summary": "Grade paired baseline/candidate patches and optionally publish a sanitized receipt.", "responses": {"200": {"description": "PASS/HOLD/BLOCK receipt"}, "400": {"description": "Input error"}, "429": {"description": "Rate limited"}}}},
+        "/mcp": {"post": {"operationId": "mcp", "summary": "MCP endpoint (Streamable HTTP JSON-RPC 2.0). Includes Tier 0 tools, the disposable report card, and Open Promotion Bench.", "responses": {"200": {"description": "JSON-RPC response"}}}},
     }
     for tool in catalog():
         example = example_payloads.get(tool["id"])
@@ -196,10 +208,10 @@ def _openapi_spec() -> dict:
             "version": __version__,
             "x-build-commit": build_commit(),
             "description": (
-                "Verifier-grounded evaluation tools for AI systems. Requests are stateless and "
-                "unauthenticated; payloads and results are not persisted. Privacy-preserving "
-                "operational counters and standard access logs are retained. Every POST tool is "
-                "also exposed as an MCP tool at /mcp."
+                "Verifier-grounded evaluation tools for AI systems. Workbench and report-card "
+                "requests are stateless and unauthenticated; payloads and results are not persisted. "
+                "Open Promotion Bench may persist only an opt-in public manifest and sanitized receipt, "
+                "never task contents or answers. Operational counters and standard access logs are retained."
             ),
             "license": {"name": "AGPL-3.0-or-later", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
         },
@@ -228,6 +240,8 @@ REST_TOOL_NAMES = {
     "/api/memory": "memory_relevance",
     "/api/replay": "replay_trace",
     "/api/counterexample": "counterexample_hunt",
+    "/api/open-bench/start": "open_bench_start",
+    "/api/open-bench/submit": "open_bench_submit",
 }
 
 
@@ -248,10 +262,10 @@ class ToolboxHandler(BaseHTTPRequestHandler):
     def _cors(self) -> None:
         """Public, unauthenticated API with no cookies or ambient authority.
 
-        Report-card ids are explicit one-shot bearer values, not browser
-        credentials. Allowing any origin is required for browser clients and
-        hosted MCP clients (claude.ai connectors send Origin); credentials are
-        never allowed, so ``*`` stays safe.
+        Report-card and Open Promotion Bench ids are explicit one-shot bearer
+        values, not browser credentials. Allowing any origin is required for
+        browser clients and hosted MCP clients (claude.ai connectors send
+        Origin); credentials are never allowed, so ``*`` stays safe.
         """
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -316,11 +330,14 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 "version": __version__,
                 "build_commit": build_commit(),
                 "stateless": True,
+                "stateless_scope": "workbench and disposable report card",
+                "publication_persistence": "opt-in Open Promotion Bench manifests and sanitized receipts only",
                 "private_bank_loaded": False,
                 "uptime_seconds": round(time.time() - STARTED_AT, 1),
                 "tools": len(catalog()),
                 "mcp_endpoint": "/mcp",
                 "report_card": hatchery().status(),
+                "open_bench": open_bench().status(),
             })
         if path == "/mcp":
             return self._json(405, {
@@ -335,6 +352,12 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             return self._json(200, examples())
         if path == "/api/evidence":
             return self._json(200, evidence())
+        if path == "/api/open-bench/leaderboard":
+            return self._json(200, open_bench().leaderboard())
+        if path.startswith("/api/open-bench/receipt/"):
+            public_id = path.rsplit("/", 1)[-1]
+            receipt = open_bench().receipt(public_id)
+            return self._json(200, receipt) if receipt is not None else self._json(404, {"error": "receipt not found"})
         if path == "/robots.txt":
             body = f"User-agent: *\nAllow: /\n\nSitemap: {CANONICAL}/sitemap.xml\n".encode("utf-8")
             return self._bytes(200, body, "text/plain; charset=utf-8", cache="public, max-age=3600")
@@ -366,7 +389,9 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         static_name = "index.html" if path in {"/", "/index.html"} else path.lstrip("/")
         if static_name == "for-agents":
             static_name = "for-agents.html"
-        if static_name not in {"index.html", "app.js", "styles.css", "skill.md", "for-agents.html", "og.png"}:
+        if static_name == "benchmark":
+            static_name = "benchmark.html"
+        if static_name not in {"index.html", "benchmark.html", "benchmark.js", "app.js", "styles.css", "skill.md", "for-agents.html", "og.png", "open-bench-og.png"}:
             return self._json(404, {"error": "not found"})
         file_path = STATIC_ROOT / static_name
         if not file_path.exists():
@@ -377,7 +402,7 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
         if not mime.startswith("image/"):
             mime = f"{mime}; charset=utf-8"
-        cache = "no-store" if static_name == "index.html" else "public, max-age=300"
+        cache = "no-store" if static_name in {"index.html", "benchmark.html"} else "public, max-age=300"
         return self._bytes(200, file_path.read_bytes(), mime, cache=cache)
 
     def do_POST(self) -> None:
@@ -424,7 +449,13 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         tool_name = REST_TOOL_NAMES.get(path, "")
         acquired = False
         try:
-            if path == "/api/counterexample":
+            if path == "/api/open-bench/start":
+                if payload:
+                    raise OpenBenchError("open benchmark start takes an empty JSON object")
+                result = open_bench().start_session(client_ip)
+            elif path == "/api/open-bench/submit":
+                result = open_bench().submit(payload, client_ip)
+            elif path == "/api/counterexample":
                 if not HUNTER_LIMIT.allow(client_ip):
                     STATS.tool_call(tool_name, "rest", "limited")
                     return self._json(429, {"error": "counterexample search limit exceeded", "request_id": request_id})
@@ -442,6 +473,10 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             result["request_id"] = request_id
             STATS.tool_call(tool_name, "rest", "ok")
             return self._json(200, result)
+        except OpenBenchError as error:
+            outcome = "limited" if error.status >= 429 else "input_error"
+            STATS.tool_call(tool_name, "rest", outcome)
+            return self._json(error.status, {"error": str(error), "retryable": error.retryable, "request_id": request_id})
         except ProductInputError as error:
             STATS.tool_call(tool_name, "rest", "input_error")
             return self._json(400, {"error": str(error), "request_id": request_id})
@@ -462,7 +497,7 @@ def serve(host: str = "127.0.0.1", port: int = 8988) -> None:
     server = make_server(host, port)
     ensure_started()  # warm the report-card hatchery in the background
     STATS.start_flusher()
-    print(f"Whetstone Tools {__version__} on http://{host}:{port} (stateless; no private bank loaded)")
+    print(f"Whetstone Tools {__version__} on http://{host}:{port} (stateless core + opt-in public receipts; no private bank loaded)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

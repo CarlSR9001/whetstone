@@ -12,9 +12,12 @@ or document root with the personal site.
   empty Linux capabilities, resource limits, and no access to home directories.
 - The archive is built from a reviewed Git commit. Gitignored `.bcv_runs`, tools,
   private results, browser output, and local secrets cannot enter it.
-- The app persists no request bodies or results. It retains operational
-  counters and salted client hashes; Nginx retains standard access metadata
-  such as address, request path, status, referrer, and user agent.
+- The workbench and disposable report card persist no request bodies or
+  results. Open Promotion Bench writes only an explicitly published sanitized
+  receipt and self-attested manifests, never task contents or answer patches.
+  The app also retains operational counters and salted client hashes; Nginx
+  retains standard access metadata such as address, request path, status,
+  referrer, and user agent.
 - HTTP exists only for ACME renewal and redirects all other traffic to HTTPS.
 
 ## Release layout
@@ -77,8 +80,9 @@ The server-side installer:
 5. Starts forge and requires an atomic post-sync status receipt with the same
    version, full commit, systemd PID, and a stable process.
 6. Starts tools only after that library sync, then requires matching version,
-   full commit, eight tools, the stateless/private-bank boundary, and a
-   successful report-card warm-up.
+   full commit, eight core tools, the stateless workbench/private-bank boundary,
+   a successful report-card warm-up, and a configured Open Promotion Bench
+   publication ledger that never retains tasks or answers.
 7. Automatically restores the previous symlink and units if any activation
    gate fails.
 

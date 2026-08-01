@@ -81,6 +81,9 @@ def main() -> int:
                 assert health["version"] == bcv.__version__
                 assert health["tools"] == 8
                 assert health["private_bank_loaded"] is False
+                assert health["open_bench"]["ready"] is True
+                assert health["open_bench"]["raw_tasks_persisted"] is False
+                assert health["open_bench"]["raw_answers_persisted"] is False
                 assert health["build_commit"] == "development" or len(health["build_commit"]) == 40
 
                 evidence = json.load(urllib.request.urlopen(base + "/api/evidence", timeout=5))
@@ -88,11 +91,14 @@ def main() -> int:
                 assert evidence["source_receipts_sha256"]
 
                 for path, marker in (
-                    ("/", b"Stop asking whether it got better"),
+                    ("/", b"Before you ship an AI change"),
+                    ("/benchmark", b"Compare the version you have"),
+                    ("/benchmark.js", b"/api/open-bench/submit"),
                     ("/skill.md", b"Whetstone"),
                     ("/app.js", b"serviceVersion"),
                     ("/styles.css", b"--cyan"),
                     ("/og.png", b"\\x89PNG\\r\\n\\x1a\\n"),
+                    ("/open-bench-og.png", b"\\x89PNG\\r\\n\\x1a\\n"),
                 ):
                     body = urllib.request.urlopen(base + path, timeout=5).read()
                     assert marker in body, (path, len(body))

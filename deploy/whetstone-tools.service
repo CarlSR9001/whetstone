@@ -1,5 +1,5 @@
 [Unit]
-Description=Whetstone stateless public tools
+Description=Whetstone public verifier tools and Open Promotion Bench
 Documentation=https://whetstone.cyberelf.link/
 Wants=network-online.target
 After=network-online.target
@@ -13,10 +13,12 @@ Environment=PYTHONPATH=/opt/whetstone-tools/current/src
 EnvironmentFile=-/etc/whetstone-tools/release.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-# Aggregate metrics (salted-hash clients, counters only) are the one sanctioned
-# write; StateDirectory is the only writable path under ProtectSystem=strict.
+# Aggregate metrics plus explicitly published, sanitized Open Promotion Bench
+# receipts are the sanctioned writes. StateDirectory is the only writable path
+# under ProtectSystem=strict; task contents and answers are never written.
 StateDirectory=whetstone-tools
 Environment=WHETSTONE_STATE_DIR=/var/lib/whetstone-tools
+Environment=WHETSTONE_OPEN_BENCH_LEDGER=/var/lib/whetstone-tools/open_bench_public.jsonl
 # Forge-mined adversary graphs (synced there by whetstone-forge). When the
 # file exists, minting and grading pools both fold it in: the public exam
 # hardens as the forge finds counterexamples, and items stay fair because
@@ -29,9 +31,9 @@ TimeoutStopSec=15
 KillSignal=SIGINT
 UMask=0077
 
-# The public process is read-only, unprivileged, loopback-bound, and does not
-# load an examiner bank. These restrictions turn those application boundaries
-# into operating-system boundaries as well.
+# The public process is otherwise read-only, unprivileged, loopback-bound, and
+# does not load an examiner bank. These restrictions turn those application
+# boundaries into operating-system boundaries as well.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

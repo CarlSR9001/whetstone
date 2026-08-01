@@ -166,12 +166,13 @@ def test_unknown_method_and_unknown_tool():
     assert body["error"]["code"] == -32602
 
 
-def test_tools_list_has_both_tiers_and_truthful_object_schemas():
+def test_tools_list_has_all_tiers_and_truthful_object_schemas():
     status, body = handle_mcp(rpc("tools/list"), next(_IP))
     tools = {tool["name"]: tool for tool in body["result"]["tools"]}
     assert {"promotion_gate", "audit_leakage", "inspect_promotion", "bank_health",
             "safe_patch", "counterexample_hunt", "memory_relevance", "replay_trace",
-            "report_card_start", "report_card_submit", "about_whetstone"} <= set(tools)
+            "report_card_start", "report_card_submit", "open_bench_start",
+            "open_bench_submit", "open_bench_leaderboard", "about_whetstone"} <= set(tools)
     for tool in tools.values():
         assert tool["inputSchema"]["type"] == "object"
     for tool_name, example_name in TIER0_EXAMPLES.items():
@@ -357,14 +358,15 @@ def test_agent_docs_are_served(toolbox_url):
     body = skill.read().decode("utf-8")
     assert body.startswith("---") and "name: whetstone-tools" in body
     assert "report_card_submit" in body and "degenerate_narrowing" in body
+    assert "open_bench_start" in body and "open_bench_submit" in body
 
     page = urllib.request.urlopen(toolbox_url + "/for-agents", timeout=5)
     assert page.status == 200
     html = page.read().decode("utf-8")
-    assert "report_card_start" in html and "/skill.md" in html
+    assert "report_card_start" in html and "open_bench_start" in html and "/skill.md" in html
 
     llms = urllib.request.urlopen(toolbox_url + "/llms.txt", timeout=5).read().decode("utf-8")
-    assert "/skill.md" in llms and "/mcp" in llms and "/for-agents" in llms
+    assert "/skill.md" in llms and "/mcp" in llms and "/for-agents" in llms and "/benchmark" in llms
 
     try:
         urllib.request.urlopen(toolbox_url + "/not-a-page", timeout=5)

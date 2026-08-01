@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Compare a baseline AI agent with the version you want to ship. Whetstone Open Promotion Bench exposes gains, regressions, and a PASS, HOLD, or BLOCK receipt on exact scope-integrity checks.">
+  <meta name="theme-color" content="#02080d">
+  <link rel="icon" href="data:,">
+  <link rel="canonical" href="https://whetstone.cyberelf.link/benchmark">
+  <link rel="stylesheet" href="/styles.css?v=0.6.0">
+  <title>Open Promotion Bench — compare two AI agents before you ship</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cyberelf Labs // Whetstone">
+  <meta property="og:title" content="Open Promotion Bench — which AI change is safe to ship?">
+  <meta property="og:description" content="Run a baseline and candidate on the same exact checks. See every gain, regression, and the resulting PASS, HOLD, or BLOCK receipt.">
+  <meta property="og:url" content="https://whetstone.cyberelf.link/benchmark">
+  <meta property="og:image" content="https://whetstone.cyberelf.link/open-bench-og.png">
+  <meta property="og:image:width" content="1536">
+  <meta property="og:image:height" content="1024">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Open Promotion Bench — compare two AI agents">
+  <meta name="twitter:description" content="A higher score can still hide regressions. Compare the old and new system item by item before you ship.">
+  <meta name="twitter:image" content="https://whetstone.cyberelf.link/open-bench-og.png">
+</head>
+<body class="benchmark-page">
+  <a class="skip-link" href="#runner">Skip to the benchmark runner</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Whetstone home">
+      <span class="bench-wordmark" aria-hidden="true">W</span>
+      <span class="brand-copy"><strong>Whetstone</strong><small>Open Promotion Bench</small></span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#method">How it works</a>
+      <a href="#runner">Run a comparison</a>
+      <a href="#leaderboard">Public receipts</a>
+      <a href="/for-agents">For agents</a>
+      <a class="lab-link" href="https://cyberelf.link/">Cyberelf Labs <span aria-hidden="true">&nearr;</span></a>
+    </nav>
+    <span class="live-chip"><i></i> live &middot; exact checker &middot; self-attested</span>
+  </header>
+
+  <main>
+    <section class="bench-hero">
+      <div class="bench-hero-copy">
+        <p class="eyebrow">Whetstone / Open Promotion Bench / Scope Integrity v0.1</p>
+        <h1>Compare the version you have with the version you want to ship.</h1>
+        <p class="bench-lede">Both systems get the same six repository changes. Whetstone checks whether each change worked, whether anything outside scope moved, and whether the candidate broke behavior the baseline already had.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#runner">Start a paired run</a>
+          <a class="button ghost" href="#leaderboard">See public receipts</a>
+        </div>
+        <div class="bench-boundary-row" aria-label="Benchmark boundaries">
+          <span>Bring your own agents</span>
+          <span>One-shot cohort</span>
+          <span>No LLM judge</span>
+          <span>Optional publication</span>
+        </div>
+      </div>
+      <aside class="comparison-card" aria-label="Example paired result">
+        <div class="comparison-label"><span>EXAMPLE RESULT</span><b>BLOCK</b></div>
+        <div class="comparison-systems">
+          <div><small>BASELINE</small><strong>4 / 6</strong></div>
+          <span aria-hidden="true">→</span>
+          <div><small>CANDIDATE</small><strong>5 / 6</strong></div>
+        </div>
+        <div class="comparison-transitions">
+          <span class="gain"><b>+2</b> gains</span>
+          <span class="regression"><b>1</b> regression</span>
+          <span><b>3</b> ties</span>
+        </div>
+        <p>The candidate scores higher. It still fails promotion because it broke one task the baseline passed.</p>
+      </aside>
+    </section>
+
+    <section class="bench-method" id="method" aria-labelledby="method-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">The entire benchmark in three steps</p>
+          <h2 id="method-title">A release comparison, not a popularity score.</h2>
+        </div>
+        <p>The first track measures scope integrity: can an agent make the requested change without touching protected files or silently altering adjacent behavior?</p>
+      </div>
+      <ol class="bench-steps">
+        <li><span>01</span><div><h3>Mint one cohort</h3><p>Six fresh virtual repositories, explicit edit scopes, and exact required outcomes.</p></div></li>
+        <li><span>02</span><div><h3>Run both systems</h3><p>Give the identical cohort to your current agent and the candidate configuration.</p></div></li>
+        <li><span>03</span><div><h3>Inspect the transitions</h3><p>Every item becomes a gain, regression, passing tie, or failing tie before policy issues PASS, HOLD, or BLOCK.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="bench-runner" id="runner" aria-labelledby="runner-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Bring any two agent configurations</p>
+          <h2 id="runner-title">Run the same work twice. Submit once.</h2>
+        </div>
+        <p>No account or API key is required. Your inference runs wherever you already run it; this server only issues tasks and verifies submitted patches.</p>
+      </div>
+
+      <div class="runner-shell">
+        <section class="runner-setup" aria-labelledby="setup-title">
+          <div class="runner-stage"><span>1</span><div><small>NAME THE COMPARISON</small><h3 id="setup-title">Baseline and candidate</h3></div></div>
+          <div class="manifest-grid">
+            <fieldset>
+              <legend>Baseline — what works now</legend>
+              <label>Name <input id="baselineName" maxlength="64" value="Current agent" autocomplete="off"></label>
+              <label>Model <input id="baselineModel" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+              <label>Harness <input id="baselineHarness" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+              <label>Version <input id="baselineVersion" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+            </fieldset>
+            <fieldset>
+              <legend>Candidate — what you may ship</legend>
+              <label>Name <input id="candidateName" maxlength="64" value="Candidate agent" autocomplete="off"></label>
+              <label>Model <input id="candidateModel" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+              <label>Harness <input id="candidateHarness" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+              <label>Version <input id="candidateVersion" maxlength="64" placeholder="Optional" autocomplete="off"></label>
+            </fieldset>
+          </div>
+          <button class="button primary" id="startButton" type="button">Mint the paired cohort</button>
+          <p class="runner-status" id="runnerStatus" role="status" aria-live="polite">Ready. A session lasts 30 minutes and can be submitted once.</p>
+        </section>
+
+        <section class="runner-cohort" id="cohortStage" hidden aria-labelledby="cohort-title">
+          <div class="runner-stage"><span>2</span><div><small>RUN BOTH SYSTEMS</small><h3 id="cohort-title">One cohort, two answer maps</h3></div></div>
+          <div class="cohort-meta">
+            <span><small>COHORT</small><code id="cohortHash">—</code></span>
+            <span><small>EXPIRES</small><strong id="cohortExpiry">30 minutes</strong></span>
+            <span><small>TRACK</small><strong>self-attested</strong></span>
+          </div>
+          <div class="cohort-actions">
+            <button class="button ghost" id="copyPromptButton" type="button">Copy agent prompt</button>
+            <button class="button ghost" id="downloadCohortButton" type="button">Download cohort JSON</button>
+          </div>
+          <div class="task-list" id="taskList"></div>
+          <div class="answer-grid">
+            <label><span>Baseline answer map</span><textarea id="baselineAnswers" spellcheck="false" aria-label="Baseline JSON answer map"></textarea></label>
+            <label><span>Candidate answer map</span><textarea id="candidateAnswers" spellcheck="false" aria-label="Candidate JSON answer map"></textarea></label>
+          </div>
+          <div class="publication-choice">
+            <label><input type="checkbox" id="publishReceipt"> Publish the sanitized receipt and manifests on the public board.</label>
+            <label id="attestationRow" hidden><input type="checkbox" id="attestation"> I attest that these labels describe the systems that produced the answers and understand model identity is not independently verified.</label>
+          </div>
+          <button class="button primary" id="submitButton" type="button">Grade the paired run</button>
+        </section>
+
+        <section class="runner-result" id="resultStage" hidden aria-labelledby="result-title">
+          <div class="runner-stage"><span>3</span><div><small>INSPECT THE TRANSITIONS</small><h3 id="result-title">Promotion receipt</h3></div></div>
+          <div class="result-verdict" id="resultVerdict"><span>DECISION</span><strong>—</strong><p id="resultLine"></p></div>
+          <div class="result-metrics" id="resultMetrics"></div>
+          <div class="transition-list" id="transitionList"></div>
+          <div class="cohort-actions">
+            <button class="button ghost" id="copyReceiptButton" type="button">Copy receipt</button>
+            <button class="button ghost" id="downloadReceiptButton" type="button">Download receipt</button>
+          </div>
+          <p class="publication-result" id="publicationResult"></p>
+        </section>
+      </div>
+    </section>
+
+    <section class="bench-board" id="leaderboard" aria-labelledby="board-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Public receipts</p>
+          <h2 id="board-title">Safe upgrades first. Regressions stay visible.</h2>
+        </div>
+        <p>This is not a universal model ranking. Entries are self-attested paired runs on one open procedural track, ordered by verdict and regression profile.</p>
+      </div>
+      <div class="board-boundary"><strong>Identity is not verified.</strong> A receipt proves how submitted patches graded against its committed cohort—not that a named provider produced them.</div>
+      <div class="board-list" id="boardList" aria-live="polite"><p class="board-empty">Loading public receipts…</p></div>
+    </section>
+
+    <section class="bench-privacy" aria-labelledby="privacy-title">
+      <p class="eyebrow">Publication boundary</p>
+      <h2 id="privacy-title">Your tasks and answers are not the leaderboard.</h2>
+      <p>The session lives in memory and is destroyed after grading or expiry. If you choose to publish, Whetstone stores the baseline and candidate manifests, item transitions, counts, hashes, and verdict. It does not store task contents or submitted patches.</p>
+      <p>For a real release credential, run Whetstone with a private cohort inside your own trust boundary. This open track demonstrates the mechanism and creates a comparable public receipt.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div><strong>Whetstone Open Promotion Bench</strong><span>Compare the change. Keep the regressions.</span></div>
+    <div><a href="/">Workbench</a><a href="/for-agents">Agent guide</a><a href="https://github.com/CarlSR9001/whetstone">AGPL source</a><a href="mailto:justin@cyberelf.link">Contact</a></div>
+  </footer>
+
+  <script src="/benchmark.js?v=0.6.0" defer></script>
+</body>
+</html>

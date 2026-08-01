@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from bcv._version import __version__
+from bcv.open_bench import open_bench
 from bcv.product_tools import examples
 from bcv.toolbox_service import _trusted_client_ip, make_server
 
@@ -76,10 +77,16 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["stateless"] is True
     assert payload["private_bank_loaded"] is False
     assert payload["tools"] == 8
-    assert payload["version"] == __version__ == "0.5.3"
+    assert payload["version"] == __version__ == "0.6.0"
     assert payload["build_commit"] == "development"
     assert payload["mcp_endpoint"] == "/mcp"
     assert payload["report_card"]["ready"] is False  # make_server never warms the hatchery
+    assert payload["stateless_scope"] == "workbench and disposable report card"
+    assert payload["open_bench"]["ready"] is True
+    assert payload["open_bench"]["publication_ledger_configured"] is False
+    assert payload["open_bench"]["publication_ledger_parent_writable"] is False
+    assert payload["open_bench"]["raw_tasks_persisted"] is False
+    assert payload["open_bench"]["raw_answers_persisted"] is False
     assert response.headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
     assert response.headers["Server"].startswith(f"WhetstoneTools/{__version__} ")
@@ -87,7 +94,7 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
 
 def test_index_and_evidence_are_public_but_sanitized(toolbox_url):
     html = urllib.request.urlopen(toolbox_url + "/", timeout=5).read().decode("utf-8")
-    assert "Stop asking whether it got better" in html
+    assert "Before you ship an AI change" in html
     assert "resultViz" in html
     assert "Use disposable or sanitized inputs" in html
     evidence, _ = get_json(toolbox_url + "/api/evidence")
@@ -98,6 +105,49 @@ def test_index_and_evidence_are_public_but_sanitized(toolbox_url):
         "redteam_gate_receipt.json",
         "relevance_eval_report.json",
     }
+
+
+def test_open_benchmark_page_and_rest_flow(toolbox_url):
+    html = urllib.request.urlopen(toolbox_url + "/benchmark", timeout=5).read().decode("utf-8")
+    script = urllib.request.urlopen(toolbox_url + "/benchmark.js", timeout=5).read().decode("utf-8")
+    social_card = urllib.request.urlopen(toolbox_url + "/open-bench-og.png", timeout=5)
+    assert "Compare the version you have" in html
+    assert "No LLM judge" in html
+    assert "/api/open-bench/start" in script
+    assert "/api/open-bench/submit" in script
+    assert social_card.headers.get_content_type() == "image/png"
+
+    session = post_json(toolbox_url + "/api/open-bench/start", {})
+    live = open_bench().sessions[session["session_id"]]["tasks"]
+    baseline = {task.public["item_id"]: {"writes": {}, "deletes": []} for task in live}
+    candidate = {task.public["item_id"]: task.reference_patch for task in live}
+    receipt = post_json(toolbox_url + "/api/open-bench/submit", {
+        "session_id": session["session_id"],
+        "baseline_manifest": {"name": "Current agent"},
+        "candidate_manifest": {"name": "Candidate agent"},
+        "baseline_answers": baseline,
+        "candidate_answers": candidate,
+        "publish": False,
+    })
+    assert receipt["verdict"] == "PASS"
+    assert receipt["gains"] == 6 and receipt["regressions"] == 0
+    board, _ = get_json(toolbox_url + "/api/open-bench/leaderboard")
+    assert board["raw_tasks_persisted"] is False
+    assert board["raw_answers_persisted"] is False
+
+
+def test_open_benchmark_start_rejects_ignored_fields(toolbox_url):
+    request = urllib.request.Request(
+        toolbox_url + "/api/open-bench/start",
+        data=json.dumps({"ignored": True}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        urllib.request.urlopen(request, timeout=5)
+    assert caught.value.code == 400
+    body = json.loads(caught.value.read().decode("utf-8"))
+    assert "empty JSON object" in body["error"]
 
 
 def test_public_privacy_claims_match_operational_telemetry(toolbox_url):

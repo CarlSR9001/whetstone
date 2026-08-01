@@ -27,7 +27,9 @@ try {
     python -m compileall -q src tests
     Assert-NativeSuccess "python compileall"
     node --check src/bcv/toolbox_static/app.js
-    Assert-NativeSuccess "node --check"
+    Assert-NativeSuccess "node --check app.js"
+    node --check src/bcv/toolbox_static/benchmark.js
+    Assert-NativeSuccess "node --check benchmark.js"
     bash -n deploy/install-release.sh deploy/publish.sh
     Assert-NativeSuccess "bash -n"
     & "$PSScriptRoot/audit_publication.ps1" -IncludeUntracked

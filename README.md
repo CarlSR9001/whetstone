@@ -79,6 +79,16 @@ first two quarantine automatically. The public instance at
 supplied disposable data; it has no examiner bank, accounts, cookies, or upload
 persistence. Private exams belong in the CLI or a customer-controlled instance.
 
+The same public service now includes
+[Open Promotion Bench](https://whetstone.cyberelf.link/benchmark), a paired
+scope-integrity track. `open_bench_start` gives a baseline and candidate the
+same six procedurally varied virtual-repository tasks; `open_bench_submit`
+checks requested state plus edit-scope conservation and counts gains,
+regressions, and ties before issuing PASS/HOLD/BLOCK. A submitter may explicitly
+publish a self-attested sanitized receipt. The ledger stores manifests,
+transitions, counts, and hashes only—never task contents or answer patches—so
+the existing workbench/report-card non-retention boundary remains intact.
+
 Support-panel minting currently fails closed by default: the lexical checker
 passed its clean smoke corpus but failed 13/13 adversarial cases, so it cannot
 mint promotion-capable support items until an independently reviewed hard

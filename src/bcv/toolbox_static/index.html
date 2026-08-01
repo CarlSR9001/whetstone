@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Whetstone is a promotion gate for AI agents: leakage and contamination audits, PASS/HOLD/BLOCK release verdicts with exact statistics, and a live MCP endpoint any agent can connect to. Stateless, free to try, AGPL source.">
+  <meta name="description" content="Compare the AI system you have with the version you want to ship. Whetstone shows every gain and regression, then issues a PASS, HOLD, or BLOCK release receipt.">
   <meta name="theme-color" content="#02080d">
   <link rel="icon" href="data:,">
   <link rel="canonical" href="https://whetstone.cyberelf.link/">
-  <link rel="stylesheet" href="/styles.css?v=0.5.3">
-  <title>Whetstone &mdash; AI agent evaluation gate: leakage audits, promotion verdicts, live MCP server</title>
+  <link rel="stylesheet" href="/styles.css?v=0.6.0">
+  <title>Whetstone &mdash; compare an AI change before you ship it</title>
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cyberelf Labs // Whetstone">
-  <meta property="og:title" content="Whetstone — the promotion gate for AI agents">
-  <meta property="og:description" content="Stop asking whether your agent got better. Make it prove it: exposure quarantine, paired verdicts with exact statistics, and a live MCP endpoint that grades agents on exams they provably never trained on.">
+  <meta property="og:title" content="Whetstone — compare the AI change before you ship it">
+  <meta property="og:description" content="Run the old and new system on the same checks. See every gain, every regression, and whether the candidate earned promotion.">
   <meta property="og:url" content="https://whetstone.cyberelf.link/">
   <meta property="og:image" content="https://whetstone.cyberelf.link/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Whetstone — the promotion gate for AI agents">
-  <meta name="twitter:description" content="Leakage audits, PASS/HOLD/BLOCK release verdicts, and a live MCP endpoint any agent can connect to. No signup; request payloads and results are not retained.">
+  <meta name="twitter:title" content="Whetstone — compare an AI change before you ship it">
+  <meta name="twitter:description" content="A better average can hide a worse system. Whetstone keeps gains and regressions visible, then issues PASS, HOLD, or BLOCK.">
   <meta name="twitter:image" content="https://whetstone.cyberelf.link/og.png">
 
   <script type="application/ld+json">
@@ -65,7 +65,7 @@
           {
             "@type": "Question",
             "name": "Does Whetstone store my data?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Request bodies, uploads, prompts, answers, results, and report-card sessions are not persisted. Privacy-preserving usage metrics (counters and salted client hashes) and standard Nginx access logs are retained. No account, cookie, or private exam bank is involved." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Workbench and disposable report-card request bodies, prompts, answers, and results are not persisted. If a benchmark submitter explicitly publishes, Whetstone stores only the public manifests and sanitized receipt, never tasks or answer patches. Privacy-preserving metrics and standard access logs are retained." }
           },
           {
             "@type": "Question",
@@ -98,6 +98,7 @@
       <span class="brand-copy"><strong>Whetstone</strong><small>Cyberelf Labs // deployment authority</small></span>
     </a>
     <nav aria-label="Primary navigation">
+      <a href="/benchmark">Open benchmark</a>
       <a href="#tools">Workbench</a>
       <a href="#evidence">Receipts</a>
       <a href="#boundary">Boundary</a>
@@ -105,19 +106,19 @@
       <a href="https://github.com/CarlSR9001/whetstone" rel="noreferrer">Core source</a>
       <a class="lab-link" href="https://cyberelf.link/" rel="noreferrer">Cyberelf Labs <span aria-hidden="true">&nearr;</span></a>
     </nav>
-    <span class="live-chip"><i></i> live &middot; stateless &middot; private bank absent</span>
+    <span class="live-chip"><i></i> live &middot; stateless workbench &middot; private bank absent</span>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="hero-main">
-        <p class="eyebrow">Cyberelf Labs // Whetstone // deployment authority</p>
-        <h1>Stop asking whether it got better.</h1>
-        <p class="hero-declaration">Make it <em>prove</em> it.</p>
-        <p class="hero-copy">Eight focused tools turn model results, exposure records, memory traces, patches, and conjectures into inspectable evidence. Every verdict comes with the item-level path that produced it.</p>
+        <p class="eyebrow">Cyberelf Labs // Whetstone // release decision</p>
+        <h1>Before you ship an AI change, check what it broke.</h1>
+        <p class="hero-declaration">The old behavior is part of the <em>contract</em>.</p>
+        <p class="hero-copy">Run the current and candidate system on the same checks. Whetstone shows every gain and regression, then returns PASS, HOLD, or BLOCK with the exact path behind the decision.</p>
         <div class="hero-actions">
-          <a class="button primary" href="#tools">Open the workbench</a>
-          <a class="button ghost" href="#evidence">See measured receipts</a>
+          <a class="button primary" href="/benchmark">Compare two agents</a>
+          <a class="button ghost" href="#tools">Open the verifier workbench</a>
         </div>
       </div>
 
@@ -132,10 +133,10 @@
       </aside>
 
       <div class="trust-row" aria-label="Hosted service boundaries">
-        <span>No accounts</span><span>No cookies</span><span>No payload retention</span><span>No private bank</span><span>Exact receipts</span>
+        <span>No accounts</span><span>No cookies</span><span>Workbench payloads not retained</span><span>No private bank</span><span>Exact receipts</span>
       </div>
       <div class="warning">
-        <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. Private exams belong in the local CLI or a deployment inside your trust boundary.
+        <strong>Public-demo boundary.</strong> Use disposable or sanitized inputs here. Benchmark publication is explicit and stores only the public manifest and sanitized receipt. Private exams belong inside your trust boundary.
       </div>
     </section>
 
@@ -270,11 +271,11 @@
           </details>
           <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
             <summary style="cursor:pointer;font-weight:700">Can Whetstone grade my agent right now?</summary>
-            <p style="margin:10px 0 0;color:var(--muted)">Yes. Over MCP, call <code>report_card_start</code> to receive a disposable six-item graph-repair exam, answer it, and submit once with <code>report_card_submit</code>. Grading is by checker spec &mdash; any verified strict refinement passes, no answer key exists &mdash; and the session is destroyed after grading.</p>
+            <p style="margin:10px 0 0;color:var(--muted)">Yes. <a href="/benchmark">Open Promotion Bench</a> gives a baseline and candidate the same six scope-integrity tasks, then counts gains and regressions. Agents can also call <code>open_bench_start</code> and <code>open_bench_submit</code> over MCP. The existing disposable graph-repair report card remains available through <code>report_card_start</code>.</p>
           </details>
           <details style="border-bottom:1px solid rgba(127,127,127,.25);padding:14px 0">
             <summary style="cursor:pointer;font-weight:700">Do you store my data?</summary>
-            <p style="margin:10px 0 0;color:var(--muted)">Request bodies, uploads, prompts, answers, results, and report-card sessions are not persisted. Privacy-preserving usage metrics (counters and salted client hashes) and standard Nginx access logs are retained. No account, cookie, or private exam bank is involved.</p>
+            <p style="margin:10px 0 0;color:var(--muted)">Workbench and disposable report-card request bodies, prompts, answers, and results are not persisted. If you explicitly publish a benchmark run, Whetstone stores only the system manifests, item transitions, counts, hashes, and verdict&mdash;never the tasks or answer patches. Privacy-preserving usage metrics and standard Nginx access logs are retained.</p>
           </details>
           <details style="padding:14px 0">
             <summary style="cursor:pointer;font-weight:700">What does it cost?</summary>

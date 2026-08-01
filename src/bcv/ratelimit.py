@@ -73,3 +73,10 @@ HUNTER_SLOT = threading.BoundedSemaphore(1)
 REPORT_START_LIMIT = SlidingWindowLimit(4, 3600)
 REPORT_SUBMIT_LIMIT = SlidingWindowLimit(8, 3600)
 GRADE_SLOT = threading.BoundedSemaphore(1)
+
+# Open Promotion Bench: sessions are cheap, but each one exposes a fresh
+# procedural cohort and public publication is deliberately scarce enough to
+# keep the unauthenticated board usable.  REST and MCP share these instances.
+BENCH_START_LIMIT = SlidingWindowLimit(6, 3600)
+BENCH_SUBMIT_LIMIT = SlidingWindowLimit(12, 3600)
+BENCH_PUBLISH_LIMIT = SlidingWindowLimit(3, 86400)

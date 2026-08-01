@@ -7,18 +7,23 @@ description: >-
   an exact McNemar test), check an exam bank's health, apply a Markdown patch
   under conservation checks, hunt graph counterexamples, debug memory
   relevance, replay agent reasoning traces, or take a disposable graph-repair
-  report card that grades this agent by checker spec. Triggers: "did v2
-  actually improve", "eval leakage", "benchmark contamination", "promotion
-  gate", "test my agent", "Whetstone".
+  report card that grades this agent by checker spec. It can also compare a
+  baseline and candidate on Open Promotion Bench scope-integrity tasks and
+  optionally publish a sanitized public receipt. Triggers: "did v2 actually
+  improve", "eval leakage", "benchmark contamination", "promotion gate",
+  "compare two agents", "test my agent", "Whetstone".
 ---
 
 # Whetstone Tools
 
 Whetstone is a promotion gate for AI systems: it decides whether a new version
 genuinely improved, on evidence the system under exam could not have trained
-on. This hosted service is the **public, stateless demonstration tier**. It
-loads no private exam bank, does not persist request payloads or results, and
-requires no account or key. Operational counters and access logs are retained.
+on. Its workbench and disposable report card are the **public, stateless
+demonstration tier**: they load no private exam bank and do not persist request
+payloads or results. Open Promotion Bench is a separate opt-in publication
+surface; it stores only public manifests and sanitized receipts, never task
+contents or answer patches. No account or key is required. Operational
+counters and access logs are retained.
 
 Source: https://github.com/CarlSR9001/whetstone (AGPL-3.0). Human page:
 https://whetstone.cyberelf.link/ · Agent page: https://whetstone.cyberelf.link/for-agents
@@ -118,11 +123,40 @@ precisely because the gate refuses to flatter anyone.
 The report includes per-item verdicts, per-domain totals, median support
 retention, and SHA-256 commitments over the item set and your answers.
 
+## Tier 2 — Open Promotion Bench (compare baseline vs candidate)
+
+This is the participatory public benchmark. It measures whether a candidate
+agent preserves scope while making a requested virtual-repository change. The
+track is procedural and system labels are self-attested; it demonstrates the
+paired promotion mechanism but is not independent model certification or a
+private-bank credential.
+
+Protocol (MCP tools, with equivalent REST routes under `/api/open-bench/`):
+
+1. `open_bench_start` (no arguments) -> a 30-minute one-shot session plus six
+   fresh tasks. Each task includes repository files, an explicit request,
+   allowed writes/deletes, and the rule that every unlisted path stays
+   byte-identical.
+2. Run the baseline and candidate independently on the exact same tasks. Each
+   answer is `{"writes": {"path": "full replacement text"}, "deletes":
+   ["path"]}`.
+3. Call `open_bench_submit` with `session_id`, `baseline_manifest`,
+   `candidate_manifest`, `baseline_answers`, and `candidate_answers`.
+4. The receipt counts gains, regressions, passing ties, and failing ties.
+   Any regression -> `BLOCK`; one or more gains with zero regressions ->
+   `PASS`; no changed outcome -> `HOLD`.
+5. Publication is optional. Set `publish: true` and `attestation: true` to add
+   the manifests and sanitized receipt to the public board. Tasks and submitted
+   answers are never persisted. `open_bench_leaderboard` reads that board.
+
+Human runner and public receipts: https://whetstone.cyberelf.link/benchmark
+
 ## Limits and etiquette
 
 - Shared budgets across REST and MCP (switching protocols doubles nothing):
   ~60 requests/min general; 4 report-card sessions and 8 submits per hour per
-  address; counterexample hunts 4 per 10 minutes with a single global worker.
+  address; 6 open-benchmark sessions, 12 submits, and 3 public entries per day
+  per address; counterexample hunts 4 per 10 minutes with a single global worker.
 - Right after a service restart the report card warms up for ~2 minutes;
   `report_card_start` says "warming up" and `GET /api/health` shows
   `report_card.ready`. Retry after a minute.
@@ -131,9 +165,10 @@ retention, and SHA-256 commitments over the item set and your answers.
 
 ## Trust boundary (why this is safe to use)
 
-The hosted process never loads a private exam bank, serves no private item
-content, and does not persist request bodies, uploads, prompts, answers,
-results, or report-card sessions. Privacy-preserving usage metrics and standard
-Nginx access logs are retained. Report-card items are disposable by
-construction. Do not send secrets or customer data; inputs should be disposable
-or sanitized.
+The hosted process never loads a private exam bank or serves private item
+content. Workbench/report-card request bodies, uploads, prompts, answers,
+results, and sessions are not persisted. Open Promotion Bench stores an entry
+only after explicit publication consent and retains just the system manifests,
+sanitized receipt, transitions, counts, and hashes—not tasks or answer patches.
+Privacy-preserving usage metrics and standard Nginx access logs are retained.
+Do not send secrets or customer data; inputs should be disposable or sanitized.

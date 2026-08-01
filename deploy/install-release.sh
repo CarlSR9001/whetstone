@@ -363,6 +363,11 @@ assert payload["stateless"] is True
 assert payload["private_bank_loaded"] is False
 assert payload["report_card"]["error"] is None
 assert payload["report_card"]["ready"] is True
+assert payload["open_bench"]["ready"] is True
+assert payload["open_bench"]["publication_ledger_configured"] is True
+assert payload["open_bench"]["publication_ledger_parent_writable"] is True
+assert payload["open_bench"]["raw_tasks_persisted"] is False
+assert payload["open_bench"]["raw_answers_persisted"] is False
 PY
     then
       health_ok=1

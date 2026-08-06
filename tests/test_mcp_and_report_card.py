@@ -7,6 +7,7 @@ the module-global rate limiters never couple tests together.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import threading
@@ -18,7 +19,7 @@ import pytest
 import bcv.ephemeral as ephemeral
 from bcv._version import __version__
 from bcv.ephemeral import MIN_SUPPORT_RETENTION, Hatchery, TierError, _passes_support_floor
-from bcv.mcp_service import handle_mcp
+from bcv.mcp_service import MODERN_PROTOCOL_VERSION, SERVER_INFO_META_KEY, handle_mcp
 from bcv.product_tools import examples, gate_results, input_schemas
 from bcv.toolbox_service import make_server
 
@@ -42,6 +43,26 @@ def rpc(method: str, params: dict | None = None, request_id: int | None = 1) -> 
     if params is not None:
         message["params"] = params
     return message
+
+
+def modern_rpc(method: str, params: dict | None = None, request_id: int | None = 1) -> dict:
+    modern_params = dict(params or {})
+    modern_params["_meta"] = {
+        "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": {"name": "whetstone-test", "version": "1.0"},
+    }
+    return rpc(method, modern_params, request_id)
+
+
+def modern_headers(method: str, name: str | None = None) -> dict[str, str]:
+    headers = {
+        "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION,
+        "Mcp-Method": method,
+    }
+    if name is not None:
+        headers["Mcp-Name"] = name
+    return headers
 
 
 def assert_matches_schema(value, schema: dict, path: str = "$") -> None:
@@ -130,6 +151,112 @@ def test_initialize_negotiates_protocol_and_declares_tools():
 def test_initialize_falls_back_on_unknown_protocol_version():
     status, body = handle_mcp(rpc("initialize", {"protocolVersion": "1999-01-01"}), next(_IP))
     assert body["result"]["protocolVersion"] == "2025-06-18"
+
+
+def test_modern_discovery_advertises_dual_era_and_server_identity():
+    status, body = handle_mcp(
+        modern_rpc("server/discover"),
+        next(_IP),
+        modern_headers("server/discover"),
+    )
+    assert status == 200
+    result = body["result"]
+    assert result["supportedVersions"][0] == MODERN_PROTOCOL_VERSION
+    assert "2025-06-18" in result["supportedVersions"]
+    assert result["resultType"] == "complete"
+    assert result["cacheScope"] == "public" and result["ttlMs"] > 0
+    assert result["_meta"][SERVER_INFO_META_KEY]["name"] == "whetstone-tools"
+    assert "serverInfo" not in result
+
+
+def test_modern_list_and_call_results_use_2026_wire_shape():
+    status, body = handle_mcp(
+        modern_rpc("tools/list"),
+        next(_IP),
+        modern_headers("tools/list"),
+    )
+    assert status == 200
+    listed = body["result"]
+    assert listed["resultType"] == "complete"
+    assert listed["cacheScope"] == "public" and listed["ttlMs"] > 0
+    assert listed["_meta"][SERVER_INFO_META_KEY]["version"] == __version__
+
+    tool = "about_whetstone"
+    status, body = handle_mcp(
+        modern_rpc("tools/call", {"name": tool, "arguments": {}}),
+        next(_IP),
+        modern_headers("tools/call", tool),
+    )
+    assert status == 200
+    called = body["result"]
+    assert called["resultType"] == "complete"
+    assert called["isError"] is False
+    assert called["_meta"][SERVER_INFO_META_KEY]["name"] == "whetstone-tools"
+    assert "ttlMs" not in called and "cacheScope" not in called
+
+
+def test_modern_requests_reject_missing_mismatched_and_unsupported_headers():
+    status, body = handle_mcp(
+        modern_rpc("tools/call", {"name": "about_whetstone", "arguments": {}}),
+        next(_IP),
+        modern_headers("tools/call"),
+    )
+    assert status == 400 and body["error"]["code"] == -32020
+
+    status, body = handle_mcp(
+        modern_rpc("tools/call", {"name": "about_whetstone", "arguments": {}}),
+        next(_IP),
+        {
+            **modern_headers("tools/call", "about_whetstone"),
+            "Mcp-Name": " \tabout_whetstone  ",
+        },
+    )
+    assert status == 200 and body["result"]["isError"] is False
+
+    missing_meta = rpc("tools/list", {})
+    status, body = handle_mcp(
+        missing_meta,
+        next(_IP),
+        modern_headers("tools/list"),
+    )
+    assert status == 400 and body["error"]["code"] == -32602
+
+    status, body = handle_mcp(
+        modern_rpc("tools/list"),
+        next(_IP),
+        {**modern_headers("tools/list"), "Mcp-Method": "prompts/list"},
+    )
+    assert status == 400 and body["error"]["code"] == -32020
+
+    unsupported = modern_rpc("tools/list")
+    unsupported["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] = "2099-01-01"
+    status, body = handle_mcp(
+        unsupported,
+        next(_IP),
+        {"MCP-Protocol-Version": "2099-01-01", "Mcp-Method": "tools/list"},
+    )
+    assert status == 400 and body["error"]["code"] == -32022
+    assert MODERN_PROTOCOL_VERSION in body["error"]["data"]["supported"]
+
+
+def test_ping_is_legacy_only_in_2026_lifecycle():
+    status, body = handle_mcp(
+        modern_rpc("ping"),
+        next(_IP),
+        modern_headers("ping"),
+    )
+    assert status == 404
+    assert body["error"]["code"] == -32601
+
+
+def test_undeclared_enumeration_methods_are_legacy_compatibility_only():
+    status, body = handle_mcp(
+        modern_rpc("prompts/list"),
+        next(_IP),
+        modern_headers("prompts/list"),
+    )
+    assert status == 404
+    assert body["error"]["code"] == -32601
 
 
 def test_notifications_get_202_and_no_body():
@@ -353,11 +480,13 @@ def toolbox_url():
         thread.join(timeout=3)
 
 
-def _post(url: str, payload) -> tuple[int, dict | None]:
+def _post(url: str, payload, headers: dict[str, str] | None = None) -> tuple[int, dict | None]:
+    request_headers = {"Content-Type": "application/json"}
+    request_headers.update(headers or {})
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=request_headers,
         method="POST",
     )
     response = urllib.request.urlopen(request, timeout=10)
@@ -374,6 +503,38 @@ def test_http_mcp_initialize_and_notification(toolbox_url):
     assert body is None
 
 
+def test_http_mcp_modern_discovery_and_tools_list(toolbox_url):
+    status, body = _post(
+        toolbox_url + "/mcp",
+        modern_rpc("server/discover"),
+        modern_headers("server/discover"),
+    )
+    assert status == 200
+    assert body["result"]["supportedVersions"][0] == MODERN_PROTOCOL_VERSION
+
+    status, body = _post(
+        toolbox_url + "/mcp",
+        modern_rpc("tools/list"),
+        modern_headers("tools/list"),
+    )
+    assert status == 200
+    assert body["result"]["resultType"] == "complete"
+    assert len(body["result"]["tools"]) >= 14
+
+
+def test_official_mcp_v2_client_negotiates_modern_lifecycle(toolbox_url):
+    from mcp import Client
+
+    async def probe():
+        async with Client(toolbox_url + "/mcp") as client:
+            listed = await client.list_tools()
+            return client.protocol_version, {tool.name for tool in listed.tools}
+
+    version, names = asyncio.run(probe())
+    assert version == MODERN_PROTOCOL_VERSION
+    assert {"promotion_gate", "report_card_start", "open_bench_start"} <= names
+
+
 def test_agent_docs_are_served(toolbox_url):
     skill = urllib.request.urlopen(toolbox_url + "/skill.md", timeout=5)
     assert skill.status == 200
@@ -382,6 +543,7 @@ def test_agent_docs_are_served(toolbox_url):
     assert body.startswith("---") and "name: whetstone-tools" in body
     assert "report_card_submit" in body and "degenerate_narrowing" in body
     assert "open_bench_start" in body and "open_bench_submit" in body
+    assert MODERN_PROTOCOL_VERSION in body and "legacy" in body.lower()
 
     page = urllib.request.urlopen(toolbox_url + "/for-agents", timeout=5)
     assert page.status == 200
@@ -421,6 +583,7 @@ def test_discovery_surfaces(toolbox_url):
         assert manifest["transport"] == "streamable-http"
         assert manifest["endpoint"].endswith("/mcp")
         assert manifest["authentication"] == {"type": "none"}
+        assert manifest["protocol_versions"][0] == MODERN_PROTOCOL_VERSION
 
     full = urllib.request.urlopen(toolbox_url + "/llms-full.txt", timeout=5).read().decode("utf-8")
     assert "## Tiers" in full and "name: whetstone-tools" in full  # index + embedded skill.md

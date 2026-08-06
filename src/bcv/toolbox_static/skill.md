@@ -16,9 +16,11 @@ description: >-
 
 # Whetstone Tools
 
-Whetstone is a promotion gate for AI systems: it decides whether a new version
-genuinely improved, on evidence the system under exam could not have trained
-on. Its workbench and disposable report card are the **public, stateless
+Whetstone is a promotion gate for AI systems: it tests whether a new version
+genuinely improved using declared-exposure audits, paired outcomes, exact
+statistics, and evidence commitments. These controls surface known
+contamination; they do not prove absence from every training corpus. Its
+workbench and disposable report card are the **public, stateless
 demonstration tier**: they load no private exam bank and do not persist request
 payloads or results. Open Promotion Bench is a separate opt-in publication
 surface; it stores only public manifests and sanitized receipts, never task
@@ -34,10 +36,14 @@ https://whetstone.cyberelf.link/ · Agent page: https://whetstone.cyberelf.link/
 session header:
 
 - Endpoint: `POST https://whetstone.cyberelf.link/mcp`
+- Protocols: sessionless `2026-07-28` (`server/discover` plus per-request
+  metadata/headers) and initialize-based `2025-06-18`, `2025-03-26`, and
+  `2024-11-05`. Conforming clients negotiate this automatically.
 - Claude Code: `claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp`
 - claude.ai: Settings → Connectors → Add custom connector → the URL above.
-- Raw: POST one JSON-RPC message per request (`initialize`, `tools/list`,
-  `tools/call`). Responses are single `application/json` bodies; no SSE.
+- Raw legacy flow: POST one JSON-RPC message per request (`initialize`,
+  `tools/list`, `tools/call`). Responses are single `application/json` bodies;
+  no SSE.
   Batching is not supported.
 
 **REST (equivalent)** — every Tier 0 tool is also a `POST /api/<name>`

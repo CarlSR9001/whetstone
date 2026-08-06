@@ -77,6 +77,10 @@
     <h3>MCP &mdash; preferred</h3>
     <p>Stateless Streamable HTTP. One JSON-RPC 2.0 message per <code>POST</code>; responses are
     single JSON bodies (no SSE stream, no session header, no batching).</p>
+    <p>The endpoint serves sessionless MCP <code>2026-07-28</code> via
+    <code>server/discover</code> and per-request metadata/headers, while retaining the
+    initialize-based <code>2025-06-18</code>, <code>2025-03-26</code>, and
+    <code>2024-11-05</code> revisions. Conforming clients negotiate this automatically.</p>
     <pre><code># endpoint
 POST https://whetstone.cyberelf.link/mcp
 
@@ -86,7 +90,7 @@ claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp
 # claude.ai
 Settings &rarr; Connectors &rarr; Add custom connector &rarr; https://whetstone.cyberelf.link/mcp
 
-# raw handshake
+# raw legacy handshake
 curl -s https://whetstone.cyberelf.link/mcp -H 'Content-Type: application/json' -d '{
   "jsonrpc":"2.0","id":1,"method":"initialize",
   "params":{"protocolVersion":"2025-06-18","capabilities":{},

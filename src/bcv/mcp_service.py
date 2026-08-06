@@ -50,7 +50,8 @@ INSTRUCTIONS = (
     "persisted, while operational counters and standard access logs are retained. Tier 1 is "
     "the disposable report card: report_card_start hands your agent a small graph-repair "
     "exam minted from the repository's public frontier, report_card_submit grades it by "
-    "checker spec (any verified strict refinement passes; no answer key exists) and "
+    "checker spec and requires a verified repair to retain at least 5% of clean support "
+    "for promotion grade (no answer key exists), then "
     "destroys the session. Tier 2 is Open Promotion Bench: open_bench_start gives a paired "
     "baseline/candidate scope-integrity cohort, open_bench_submit grades both answer maps, "
     "and open_bench_leaderboard returns opt-in public receipts. Published entries retain only "
@@ -169,8 +170,9 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
         _report_card_submit,
         "TIER 1: submit answers for a report-card session and receive the graded report "
         "(per-item verdicts, per-domain totals, SHA-256 commitments). Grading is by checker "
-        "spec: any verified strict refinement of the item's predicate passes; no answer key "
-        "exists. The session is destroyed by this call.",
+        "spec: verified strict refinements are reported separately, and promotion grade "
+        "requires at least 5% clean-support retention. No answer key exists. The session is "
+        "destroyed by this call.",
         {
             "type": "object",
             "properties": {
@@ -349,14 +351,22 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         handler = entry[0]
         try:
             result = handler(arguments, client_ip)
-        except (ProductInputError, TierError, OpenBenchError) as error:
-            STATS.tool_call(name, "mcp", "input_error")
+        except ProductInputError as error:
+            STATS.tool_call(name, "mcp", "input_error", "invalid_input")
+            return 200, _tool_failure(request_id, str(error))
+        except TierError as error:
+            STATS.tool_call(name, "mcp", "input_error", "tier_refusal")
+            return 200, _tool_failure(request_id, str(error))
+        except OpenBenchError as error:
+            outcome = "limited" if error.status >= 429 else "input_error"
+            reason = "rate_limit" if error.status >= 429 else "bench_refusal"
+            STATS.tool_call(name, "mcp", outcome, reason)
             return 200, _tool_failure(request_id, str(error))
         except Exception as error:  # fail closed without reflecting internals
-            STATS.tool_call(name, "mcp", "internal_error")
+            STATS.tool_call(name, "mcp", "internal_error", "internal_exception")
             print(f"mcp tool {name} failed: {type(error).__name__}", flush=True)
             return 200, _tool_failure(request_id, "internal processing error")
-        STATS.tool_call(name, "mcp", "ok")
+        STATS.tool_call(name, "mcp", "ok", "none")
         return 200, _rpc_result(request_id, {
             "content": [{"type": "text", "text": json.dumps(result, sort_keys=True, indent=1)}],
             "structuredContent": result,

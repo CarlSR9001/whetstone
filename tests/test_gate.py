@@ -107,3 +107,23 @@ def test_reliability_aware_gate_blocks_stable_regression_but_holds_unknown_one(t
     bank.items["i0"].graded = {}
     unknown = build_gate_report(bank, "base", "candidate", baseline, candidate, policy=policy)
     assert unknown["verdict"] == "HOLD"
+
+
+def test_reliability_aware_pass_reason_describes_allowed_noisy_regression(tmp_path):
+    bank = _bank(tmp_path, count=11)
+    baseline = {item_id: False for item_id in bank.items}
+    candidate = {item_id: True for item_id in bank.items}
+    baseline["i0"] = True
+    candidate["i0"] = False
+    bank.items["i0"].graded["repeat"] = {"pass": 5, "fail": 5}
+    policy = GatePolicy(require_retained_probe=False, regression_policy="reliability_aware")
+
+    report = build_gate_report(bank, "base", "candidate", baseline, candidate, policy=policy)
+
+    assert report["verdict"] == "PASS"
+    assert report["paired_evidence"]["exact_mcnemar_two_sided_p"] == 0.01171875
+    reason = report["reasons"][0]
+    assert "1 historically noisy regression(s) stayed within the policy budget of 1" in reason
+    assert "retained probe was not required" in reason
+    assert "no regressions" not in reason
+    assert "retained probe held" not in reason

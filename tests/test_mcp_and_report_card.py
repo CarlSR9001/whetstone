@@ -17,7 +17,7 @@ import pytest
 
 import bcv.ephemeral as ephemeral
 from bcv._version import __version__
-from bcv.ephemeral import Hatchery, TierError
+from bcv.ephemeral import MIN_SUPPORT_RETENTION, Hatchery, TierError, _passes_support_floor
 from bcv.mcp_service import handle_mcp
 from bcv.product_tools import examples, gate_results, input_schemas
 from bcv.toolbox_service import make_server
@@ -244,10 +244,33 @@ def test_report_card_full_flow_with_certified_repairs(warm_hatchery):
     }), ip)
     report = body["result"]["structuredContent"]
     assert report["passed"] == report["total"] == 2
+    assert report["verified"] == report["total"]
     assert report["disposable_cohort"] is True
     assert len(report["item_set_sha256"]) == 64
-    assert all(row["support_retention"] > 0 for row in report["items"])
+    assert all(row["support_retention"] >= MIN_SUPPORT_RETENTION for row in report["items"])
+    assert not any(row["degenerate_narrowing"] for row in report["items"])
+    assert report["grading_policy"]["minimum_support_retention"] == MIN_SUPPORT_RETENTION
     assert report["median_support_retention"] is not None
+
+
+def test_report_card_separates_checker_verification_from_promotion_grade(warm_hatchery, monkeypatch):
+    ip = next(_IP)
+    session = warm_hatchery.start_session(ip)
+    answers = certified_answers(warm_hatchery, session)
+    monkeypatch.setattr(ephemeral, "_support_retention", lambda *args: MIN_SUPPORT_RETENTION / 2)
+
+    report = warm_hatchery.submit(session["session_id"], answers, ip)
+
+    assert report["verified"] == report["total"] == 2
+    assert report["passed"] == 0
+    assert all(row["verified"] and not row["passed"] for row in report["items"])
+    assert all(row["degenerate_narrowing"] for row in report["items"])
+
+
+def test_support_floor_is_inclusive_at_the_disclosed_boundary():
+    assert not _passes_support_floor(True, MIN_SUPPORT_RETENTION - 0.0001)
+    assert _passes_support_floor(True, MIN_SUPPORT_RETENTION)
+    assert not _passes_support_floor(False, 1.0)
 
 
 def test_sessions_are_one_shot(warm_hatchery):

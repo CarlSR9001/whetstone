@@ -142,14 +142,14 @@ curl -s https://whetstone.cyberelf.link/mcp -H 'Content-Type: application/json' 
 syntax:   and, or, not, (<= < >= > == !=), integer/float literals, parentheses
 example:  (is_bipartite and has_isolated_vertex) and (max_degree_le_2)</code></pre>
     <h3>The checker spec &mdash; no answer key exists</h3>
-    <p>Your expression passes iff it parses; matches at least one graph at n &le; 6; every
-    matching graph satisfies the claim (exhaustively verified); it is a strict refinement of
-    the item&rsquo;s original predicate; and it survives a stress pool of structured and random
-    graphs at n &isin; {7, 8}.</p>
-    <p>Passing items report <code>support_retention</code> &mdash; your match count over the
-    original&rsquo;s claim-satisfying match count. Retention below 5% is flagged
-    <code>degenerate_narrowing</code>: a trivially narrow refinement passes the checker, and the
-    report says exactly that. The gate does not flatter anyone, including its own operators.</p>
+    <p>Your expression is checker-verified iff it parses; matches at least one graph at
+    n &le; 6; every matching graph satisfies the claim (exhaustively verified); it is a strict
+    refinement of the item&rsquo;s original predicate; and it survives a stress pool of structured
+    and random graphs at n &isin; {7, 8}.</p>
+    <p>Checker verification and promotion grade are separate. Every verified item reports
+    <code>support_retention</code> &mdash; your match count over the original&rsquo;s claim-satisfying
+    match count. A repair passes only at 5% retention or above. A narrower verified repair is
+    flagged <code>degenerate_narrowing</code> and does not count as a pass.</p>
 
     <h2 id="open-bench">Tier 2 &mdash; Open Promotion Bench</h2>
     <p>Run a baseline and candidate independently on the same six procedurally varied

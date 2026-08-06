@@ -42,6 +42,28 @@ SESSION_TTL_SECONDS = 900.0
 MAX_ACTIVE_SESSIONS = 64
 ITEMS_PER_SESSION = 6
 MASTER_ITEMS_PER_DOMAIN = 24
+MIN_SUPPORT_RETENTION = 0.05
+
+
+def _passes_support_floor(verified: bool, retention: float | None) -> bool:
+    """Promotion-grade repairs must be checker-valid and retain useful support."""
+    return bool(verified and retention is not None and retention >= MIN_SUPPORT_RETENTION)
+
+
+def _support_retention(domain_name: str, item, expression: str, max_n: int) -> float:
+    """Measure retained clean support on the exhaustive small-graph corpus."""
+    from pathlib import Path
+
+    from bcv.domains import DOMAINS
+    from bcv.graph_agent import compile_feature_expression
+    from bcv.refinery import _observe_all
+
+    observations = _observe_all(DOMAINS[domain_name], max_n, Path(".unused"))
+    predicate = compile_feature_expression(expression)
+    original = compile_feature_expression(item.payload["original_expression"])
+    clean = sum(1 for obs in observations if original(obs) and obs.greedy_is_optimal)
+    kept = sum(1 for obs in observations if predicate(obs))
+    return round(kept / clean, 4) if clean else 0.0
 
 
 class Hatchery:
@@ -284,9 +306,10 @@ class Hatchery:
             "honesty_note": (
                 "Disposable practice cohort. Items are minted from the repository's public "
                 "frontier and graded by checker specs (any verified strict refinement passes; "
-                "no answer key exists). Support retention is reported per passing item: a "
-                "trivially narrow refinement passes the checker but flags as degenerate "
-                "narrowing. This demonstrates the promotion-gate mechanism; it is not a "
+                "no answer key exists). Checker verification and promotion grade are separate: "
+                f"a verified repair must retain at least {MIN_SUPPORT_RETENTION:.0%} of clean "
+                "support to pass. Narrower verified repairs are reported as degenerate, not "
+                "counted as passes. This demonstrates the promotion-gate mechanism; it is not a "
                 "private-bank credential."
             ),
         }
@@ -312,12 +335,8 @@ class Hatchery:
             GRADE_SLOT.release()
 
     def _grade(self, session: dict, answers: dict, now: float) -> dict:
-        from bcv.domains import DOMAINS
         from bcv.examiner import grade_repair_answer
-        from bcv.graph_agent import compile_feature_expression
-        from bcv.refinery import _observe_all
         from bcv.transformers_client import extract_json
-        from pathlib import Path
 
         graded: list[dict] = []
         passed_by_domain: dict[str, list[int]] = {}
@@ -333,58 +352,71 @@ class Hatchery:
                     expression = raw.strip()
             elif isinstance(raw, dict) and isinstance(raw.get("repair_expression"), str):
                 expression = raw["repair_expression"]
-            ok = bool(expression) and grade_repair_answer(
+            verified = bool(expression) and grade_repair_answer(
                 item, expression, max_n=self.max_n, pool=session["pools"][domain_name]
             )
             row = {
                 "item_id": public_id,
                 "domain": domain_name,
                 "answered": raw is not None,
-                "passed": ok,
+                "verified": verified,
+                "passed": False,
+                "support_retention": None,
+                "degenerate_narrowing": False,
             }
-            if ok:
-                # Mode-collapse diagnostic: the checker spec accepts ANY verified
-                # strict refinement, including a degenerate ultra-narrow one. We
-                # report how much of the original's clean support the repair
-                # retains instead of pretending the game does not exist.
-                observations = _observe_all(DOMAINS[domain_name], self.max_n, Path(".unused"))
-                predicate = compile_feature_expression(expression)
-                original = compile_feature_expression(item.payload["original_expression"])
-                clean = sum(1 for obs in observations if original(obs) and obs.greedy_is_optimal)
-                kept = sum(1 for obs in observations if predicate(obs))
-                retention = round(kept / clean, 4) if clean else 0.0
+            if verified:
+                retention = _support_retention(domain_name, item, expression, self.max_n)
                 row["support_retention"] = retention
-                row["degenerate_narrowing"] = retention < 0.05
+                row["degenerate_narrowing"] = retention < MIN_SUPPORT_RETENTION
+                row["passed"] = _passes_support_floor(verified, retention)
                 retentions.append(retention)
-            counts = passed_by_domain.setdefault(domain_name, [0, 0])
-            counts[0] += int(ok)
-            counts[1] += 1
+            counts = passed_by_domain.setdefault(domain_name, [0, 0, 0])
+            counts[0] += int(row["passed"])
+            counts[1] += int(verified)
+            counts[2] += 1
             graded.append(row)
         total = len(graded)
+        verified = sum(1 for row in graded if row["verified"])
         passed = sum(1 for row in graded if row["passed"])
+        degenerate = sum(1 for row in graded if row["degenerate_narrowing"])
         median_retention = sorted(retentions)[len(retentions) // 2] if retentions else None
         STATS.bump("report_card.graded")
         STATS.bump("report_card.items_graded", total)
+        STATS.bump("report_card.items_verified", verified)
         STATS.bump("report_card.items_passed", passed)
+        STATS.bump("report_card.items_degenerate", degenerate)
         for retention in retentions:
             STATS.retention_bucket(retention)
         item_ids = sorted(session["items"])
         answer_blob = json.dumps({key: answers.get(key) for key in item_ids}, sort_keys=True, default=str)
         return {
             "passed": passed,
+            "verified": verified,
             "total": total,
-            "per_domain": {name: {"passed": p, "total": t} for name, (p, t) in sorted(passed_by_domain.items())},
+            "per_domain": {
+                name: {"passed": passed_count, "verified": verified_count, "total": total_count}
+                for name, (passed_count, verified_count, total_count) in sorted(passed_by_domain.items())
+            },
             "items": graded,
             "verdict_line": (
-                f"{passed}/{total} verified repairs — checker-spec graded (any verified strict "
-                "refinement passes; no answer key exists)."
+                f"{passed}/{total} promotion-grade repairs; {verified}/{total} checker-verified. "
+                f"Passing requires a verified strict refinement retaining at least "
+                f"{MIN_SUPPORT_RETENTION:.0%} of clean support; no answer key exists."
                 + (
                     f" Median support retention {median_retention:.0%}"
-                    + (" — degenerate-narrowing diagnostic FIRED." if median_retention < 0.05 else ".")
+                    + (
+                        " — degenerate-narrowing floor FIRED."
+                        if median_retention < MIN_SUPPORT_RETENTION
+                        else "."
+                    )
                     if median_retention is not None
                     else ""
                 )
             ),
+            "grading_policy": {
+                "checker_verification_required": True,
+                "minimum_support_retention": MIN_SUPPORT_RETENTION,
+            },
             "median_support_retention": median_retention,
             "item_set_sha256": hashlib.sha256(json.dumps(item_ids).encode("utf-8")).hexdigest(),
             "answers_sha256": hashlib.sha256(answer_blob.encode("utf-8")).hexdigest(),

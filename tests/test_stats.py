@@ -32,6 +32,7 @@ def test_persistence_round_trip_preserves_salt_and_counts(tmp_path):
     first = Stats(path)
     first.touch("203.0.113.7")
     first.tool_call("promotion_gate", "mcp", "ok")
+    first.tool_call("promotion_gate", "rest", "input_error", "invalid_input")
     first.bump("report_card.sessions")
     first.flush()
 
@@ -41,6 +42,9 @@ def test_persistence_round_trip_preserves_salt_and_counts(tmp_path):
     assert summary["unique_clients"] == 1
     assert summary["requests_total"] == 2
     assert summary["tool_calls"]["promotion_gate"]["mcp"] == 1
+    assert summary["tool_outcomes"]["promotion_gate"]["mcp"]["ok"] == 1
+    assert summary["tool_outcomes"]["promotion_gate"]["rest"]["input_error"] == 1
+    assert summary["tool_failure_reasons"]["promotion_gate"]["rest"]["invalid_input"] == 1
     assert summary["report_card"]["sessions"] == 1
     assert summary["persistent"] is True
 
@@ -61,6 +65,14 @@ def test_retention_buckets():
     assert buckets["retention.lt25"] == 1
     assert buckets["retention.lt50"] == 1
     assert buckets["retention.ge50"] == 1
+
+
+def test_tool_dimensions_are_bounded_to_declared_categories():
+    stats = Stats(None)
+    stats.tool_call("promotion_gate", "unexpected", "surprise", "user-controlled-string")
+    summary = stats.public_summary()
+    assert summary["tool_outcomes"]["promotion_gate"]["other"] == {"internal_error": 1}
+    assert summary["tool_failure_reasons"]["promotion_gate"]["other"] == {"other": 1}
 
 
 @pytest.fixture()

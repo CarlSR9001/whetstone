@@ -113,15 +113,16 @@ iff ALL of:
    at n ∈ {7, 8}.
 
 Practical strategy: conjoin the original predicate with a restriction that
-provably restores the claim. Prefer restrictions that keep support large:
-each passing item reports `support_retention` (your match count over the
-original's claim-satisfying match count), and retention below 5% is flagged
-`degenerate_narrowing: true`. A trivially narrow refinement (e.g. forcing tiny
-graphs) passes the checker but the report says so — the diagnostic exists
-precisely because the gate refuses to flatter anyone.
+provably restores the claim. Prefer restrictions that keep support large.
+Checker verification and promotion grade are separate: every verified item
+reports `support_retention` (your match count over the original's
+claim-satisfying match count), and a repair passes only when retention is at
+least 5%. A verified but narrower repair is reported with
+`degenerate_narrowing: true` and does not count as a pass.
 
-The report includes per-item verdicts, per-domain totals, median support
-retention, and SHA-256 commitments over the item set and your answers.
+The report includes per-item `verified` and `passed` verdicts, per-domain
+totals, the disclosed grading policy, median support retention, and SHA-256
+commitments over the item set and your answers.
 
 ## Tier 2 — Open Promotion Bench (compare baseline vs candidate)
 

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from bcv._version import __version__, build_commit
 from bcv.ephemeral import ensure_started, hatchery
-from bcv.mcp_service import handle_mcp
+from bcv.mcp_service import SUPPORTED_PROTOCOL_VERSIONS, handle_mcp
 from bcv.open_bench import OpenBenchError, open_bench
 from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
 from bcv.stats import STATS
@@ -154,7 +154,7 @@ def _mcp_manifest() -> dict:
         ),
         "endpoint": f"{CANONICAL}/mcp",
         "transport": "streamable-http",
-        "protocol_versions": ["2025-06-18", "2025-03-26", "2024-11-05"],
+        "protocol_versions": list(SUPPORTED_PROTOCOL_VERSIONS),
         "authentication": {"type": "none"},
         "capabilities": {"tools": True, "resources": False, "prompts": False},
         "documentation": f"{CANONICAL}/for-agents",
@@ -271,7 +271,7 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header(
             "Access-Control-Allow-Headers",
-            "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id",
+            "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Mcp-Method, Mcp-Name",
         )
         self.send_header("Access-Control-Max-Age", "86400")
 
@@ -438,7 +438,15 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 "request_id": request_id,
             })
         if path == "/mcp":
-            status, body = handle_mcp(payload, client_ip)
+            status, body = handle_mcp(
+                payload,
+                client_ip,
+                {
+                    "MCP-Protocol-Version": self.headers.get("MCP-Protocol-Version"),
+                    "Mcp-Method": self.headers.get("Mcp-Method"),
+                    "Mcp-Name": self.headers.get("Mcp-Name"),
+                },
+            )
             if body is None:
                 return self._bytes(status, b"", "application/json; charset=utf-8")
             return self._json(status, body)
@@ -457,11 +465,11 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 result = open_bench().submit(payload, client_ip)
             elif path == "/api/counterexample":
                 if not HUNTER_LIMIT.allow(client_ip):
-                    STATS.tool_call(tool_name, "rest", "limited")
+                    STATS.tool_call(tool_name, "rest", "limited", "rate_limit")
                     return self._json(429, {"error": "counterexample search limit exceeded", "request_id": request_id})
                 acquired = HUNTER_SLOT.acquire(blocking=False)
                 if not acquired:
-                    STATS.tool_call(tool_name, "rest", "limited")
+                    STATS.tool_call(tool_name, "rest", "limited", "busy")
                     return self._json(429, {"error": "counterexample worker busy; retry shortly", "request_id": request_id})
                 result = hunt_counterexample(payload)
             else:
@@ -471,17 +479,18 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                     return self._json(404, {"error": "unknown endpoint", "request_id": request_id})
                 result = handler(payload)
             result["request_id"] = request_id
-            STATS.tool_call(tool_name, "rest", "ok")
+            STATS.tool_call(tool_name, "rest", "ok", "none")
             return self._json(200, result)
         except OpenBenchError as error:
             outcome = "limited" if error.status >= 429 else "input_error"
-            STATS.tool_call(tool_name, "rest", outcome)
+            reason = "rate_limit" if error.status >= 429 else "bench_refusal"
+            STATS.tool_call(tool_name, "rest", outcome, reason)
             return self._json(error.status, {"error": str(error), "retryable": error.retryable, "request_id": request_id})
         except ProductInputError as error:
-            STATS.tool_call(tool_name, "rest", "input_error")
+            STATS.tool_call(tool_name, "rest", "input_error", "invalid_input")
             return self._json(400, {"error": str(error), "request_id": request_id})
         except Exception as error:  # fail closed without reflecting internals
-            STATS.tool_call(tool_name, "rest", "internal_error")
+            STATS.tool_call(tool_name, "rest", "internal_error", "internal_exception")
             print(f"toolbox request {request_id} failed: {type(error).__name__}", flush=True)
             return self._json(500, {"error": "internal processing error", "request_id": request_id})
         finally:

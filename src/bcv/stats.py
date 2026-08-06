@@ -13,6 +13,7 @@ Design constraints, in order:
   persistence happens on a background flush thread.
 
 Tracked: unique and repeat clients, calls per tool per transport (rest/mcp),
+bounded outcomes and failure reasons per tool/transport,
 report-card funnel (sessions started / graded / items passed / retention
 buckets), Open Promotion Bench sessions/grades/verdicts/publications, error
 categories, and abuse-shaped refusals (rate limits,
@@ -32,6 +33,17 @@ from pathlib import Path
 
 FLUSH_SECONDS = 60.0
 MAX_TRACKED_CLIENTS = 50_000
+TOOL_OUTCOMES = frozenset({"ok", "input_error", "internal_error", "limited"})
+TOOL_REASONS = frozenset({
+    "none",
+    "invalid_input",
+    "tier_refusal",
+    "bench_refusal",
+    "rate_limit",
+    "busy",
+    "internal_exception",
+    "other",
+})
 
 
 def _state_dir() -> Path | None:
@@ -74,11 +86,16 @@ class Stats:
             self.counters[name] += amount
             self.dirty = True
 
-    def tool_call(self, tool: str, transport: str, outcome: str) -> None:
-        """outcome: ok | input_error | internal_error | limited"""
+    def tool_call(self, tool: str, transport: str, outcome: str, reason: str = "none") -> None:
+        """Record one known tool call using bounded operator-defined dimensions."""
+        safe_outcome = outcome if outcome in TOOL_OUTCOMES else "internal_error"
+        safe_reason = reason if reason in TOOL_REASONS else "other"
+        safe_transport = transport if transport in {"rest", "mcp"} else "other"
         with self.lock:
-            self.counters[f"tool.{tool}.{transport}"] += 1
-            self.counters[f"outcome.{outcome}"] += 1
+            self.counters[f"tool.{tool}.{safe_transport}"] += 1
+            self.counters[f"tool_outcome.{tool}.{safe_transport}.{safe_outcome}"] += 1
+            self.counters[f"tool_reason.{tool}.{safe_transport}.{safe_reason}"] += 1
+            self.counters[f"outcome.{safe_outcome}"] += 1
             self.dirty = True
 
     def retention_bucket(self, retention: float) -> None:
@@ -134,11 +151,23 @@ class Stats:
     def public_summary(self) -> dict:
         with self.lock:
             tools: dict[str, dict[str, int]] = defaultdict(lambda: {"rest": 0, "mcp": 0})
+            tool_outcomes: dict[str, dict[str, dict[str, int]]] = defaultdict(
+                lambda: defaultdict(dict)
+            )
+            tool_reasons: dict[str, dict[str, dict[str, int]]] = defaultdict(
+                lambda: defaultdict(dict)
+            )
             other: dict[str, int] = {}
             for name, value in self.counters.items():
                 if name.startswith("tool."):
                     _, tool, transport = name.split(".", 2)
                     tools[tool][transport] = value
+                elif name.startswith("tool_outcome."):
+                    _, tool, transport, outcome = name.split(".", 3)
+                    tool_outcomes[tool][transport][outcome] = value
+                elif name.startswith("tool_reason."):
+                    _, tool, transport, reason = name.split(".", 3)
+                    tool_reasons[tool][transport][reason] = value
                 else:
                     other[name] = value
             repeat = sum(1 for count in self.clients.values() if count > 1)
@@ -149,6 +178,14 @@ class Stats:
                 "repeat_clients": repeat,
                 "requests_total": other.get("requests_total", 0),
                 "tool_calls": {name: dict(counts) for name, counts in sorted(tools.items())},
+                "tool_outcomes": {
+                    name: {transport: dict(counts) for transport, counts in sorted(transports.items())}
+                    for name, transports in sorted(tool_outcomes.items())
+                },
+                "tool_failure_reasons": {
+                    name: {transport: dict(counts) for transport, counts in sorted(transports.items())}
+                    for name, transports in sorted(tool_reasons.items())
+                },
                 "outcomes": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("outcome.")},
                 "report_card": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("report_card.")},
                 "open_bench": {k.split(".", 1)[1]: v for k, v in other.items() if k.startswith("open_bench.")},

@@ -2,6 +2,9 @@
 __pycache__/
 .pytest_cache/
 .pytest-tmp*/
+.coverage
+coverage.xml
+htmlcov/
 .venv*/
 *.pyc
 *.egg-info/

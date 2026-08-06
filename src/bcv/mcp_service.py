@@ -1,9 +1,9 @@
 """Remote MCP endpoint for the public toolbox: stdlib-only Streamable HTTP.
 
 One POST route (`/mcp`) speaks JSON-RPC 2.0 with single ``application/json``
-responses, no SSE stream, and no MCP session header. That is the smallest
-spec-compliant surface, adds zero dependencies to the VPS, and inherits the
-toolbox's trust boundary:
+responses and no SSE stream. It serves the stateful 2025 initialization era
+and the sessionless 2026-07-28 era on the same endpoint, without adding a
+runtime dependency to the VPS, and inherits the toolbox's trust boundary:
 
 - Tier 0 tools wrap the existing stateless product tools (the caller brings
   every byte of data; request bodies and results are not persisted).
@@ -40,8 +40,15 @@ from bcv.product_tools import (
 from bcv.ratelimit import HUNTER_LIMIT, HUNTER_SLOT
 from bcv.stats import STATS
 
-SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+MODERN_PROTOCOL_VERSION = "2026-07-28"
+LEGACY_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+SUPPORTED_PROTOCOL_VERSIONS = (MODERN_PROTOCOL_VERSION, *LEGACY_PROTOCOL_VERSIONS)
 SERVER_INFO = {"name": "whetstone-tools", "version": __version__}
+SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
+PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
+CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities"
+CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
+CACHE_TTL_MS = 300_000
 
 INSTRUCTIONS = (
     "Whetstone's public verifier toolbox as MCP tools. Three tiers. Tier 0 is stateless: "
@@ -50,7 +57,8 @@ INSTRUCTIONS = (
     "persisted, while operational counters and standard access logs are retained. Tier 1 is "
     "the disposable report card: report_card_start hands your agent a small graph-repair "
     "exam minted from the repository's public frontier, report_card_submit grades it by "
-    "checker spec (any verified strict refinement passes; no answer key exists) and "
+    "checker spec and requires a verified repair to retain at least 5% of clean support "
+    "for promotion grade (no answer key exists), then "
     "destroys the session. Tier 2 is Open Promotion Bench: open_bench_start gives a paired "
     "baseline/candidate scope-integrity cohort, open_bench_submit grades both answer maps, "
     "and open_bench_leaderboard returns opt-in public receipts. Published entries retain only "
@@ -169,8 +177,9 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
         _report_card_submit,
         "TIER 1: submit answers for a report-card session and receive the graded report "
         "(per-item verdicts, per-domain totals, SHA-256 commitments). Grading is by checker "
-        "spec: any verified strict refinement of the item's predicate passes; no answer key "
-        "exists. The session is destroyed by this call.",
+        "spec: verified strict refinements are reported separately, and promotion grade "
+        "requires at least 5% clean-support retention. No answer key exists. The session is "
+        "destroyed by this call.",
         {
             "type": "object",
             "properties": {
@@ -277,23 +286,146 @@ def _tool_list() -> list[dict]:
     ]
 
 
-def _rpc_error(request_id: Any, code: int, message: str) -> dict:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+def _rpc_error(request_id: Any, code: int, message: str, data: dict | None = None) -> dict:
+    error = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": request_id, "error": error}
 
 
-def _rpc_result(request_id: Any, result: dict) -> dict:
+def _modern_result(result: dict, *, cacheable: bool = False) -> dict:
+    modern = dict(result)
+    modern["resultType"] = "complete"
+    metadata = dict(modern.get("_meta") or {})
+    metadata.setdefault(SERVER_INFO_META_KEY, SERVER_INFO)
+    modern["_meta"] = metadata
+    if cacheable:
+        modern.setdefault("cacheScope", "public")
+        modern.setdefault("ttlMs", CACHE_TTL_MS)
+    return modern
+
+
+def _rpc_result(
+    request_id: Any,
+    result: dict,
+    *,
+    modern: bool = False,
+    cacheable: bool = False,
+) -> dict:
+    if modern:
+        result = _modern_result(result, cacheable=cacheable)
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def _tool_failure(request_id: Any, message: str) -> dict:
+def _tool_failure(request_id: Any, message: str, *, modern: bool = False) -> dict:
     # Tool-level failures are results with isError, not protocol errors.
-    return _rpc_result(request_id, {
-        "content": [{"type": "text", "text": message}],
-        "isError": True,
-    })
+    return _rpc_result(
+        request_id,
+        {
+            "content": [{"type": "text", "text": message}],
+            "isError": True,
+        },
+        modern=modern,
+    )
 
 
-def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
+def _header_mismatch(request_id: Any, message: str) -> tuple[int, dict]:
+    STATS.bump("mcp.header_mismatch")
+    return 400, _rpc_error(request_id, -32020, message)
+
+
+def _unsupported_protocol(request_id: Any, requested: str) -> tuple[int, dict]:
+    STATS.bump("mcp.unsupported_protocol")
+    return 400, _rpc_error(
+        request_id,
+        -32022,
+        f"unsupported MCP protocol version {requested!r}",
+        {"requested": requested, "supported": list(SUPPORTED_PROTOCOL_VERSIONS)},
+    )
+
+
+def _modern_request(
+    payload: dict,
+    params: dict,
+    request_headers: dict[str, str | None] | None,
+) -> tuple[bool, tuple[int, dict] | None]:
+    """Classify and validate the 2026 per-request envelope and HTTP mirrors."""
+    headers = {
+        str(key).lower(): value.strip(" \t") if isinstance(value, str) else value
+        for key, value in (request_headers or {}).items()
+    }
+    metadata = params.get("_meta")
+    body_version = metadata.get(PROTOCOL_VERSION_META_KEY) if isinstance(metadata, dict) else None
+    header_version = headers.get("mcp-protocol-version")
+    method = payload.get("method")
+    request_id = payload.get("id")
+    modern = (
+        method == "server/discover"
+        or body_version is not None
+        or header_version == MODERN_PROTOCOL_VERSION
+    )
+    if not modern:
+        if header_version is not None and header_version not in LEGACY_PROTOCOL_VERSIONS:
+            return True, _unsupported_protocol(request_id, header_version)
+        return False, None
+
+    if not isinstance(metadata, dict):
+        STATS.bump("mcp.invalid_envelope")
+        return True, (400, _rpc_error(request_id, -32602, "request params._meta must be an object"))
+    if not isinstance(body_version, str) or not body_version:
+        STATS.bump("mcp.invalid_envelope")
+        return True, (400, _rpc_error(request_id, -32602, "protocolVersion is required in request _meta"))
+    capabilities = metadata.get(CLIENT_CAPABILITIES_META_KEY)
+    if not isinstance(capabilities, dict):
+        STATS.bump("mcp.invalid_envelope")
+        return True, (400, _rpc_error(request_id, -32602, "clientCapabilities must be an object in request _meta"))
+    client_info = metadata.get(CLIENT_INFO_META_KEY)
+    if client_info is not None and (
+        not isinstance(client_info, dict)
+        or not isinstance(client_info.get("name"), str)
+        or not isinstance(client_info.get("version"), str)
+    ):
+        STATS.bump("mcp.invalid_envelope")
+        return True, (400, _rpc_error(request_id, -32602, "clientInfo must contain string name and version"))
+
+    if header_version != body_version:
+        return True, _header_mismatch(request_id, "MCP-Protocol-Version does not match request _meta")
+    if body_version not in SUPPORTED_PROTOCOL_VERSIONS:
+        return True, _unsupported_protocol(request_id, body_version)
+    if body_version != MODERN_PROTOCOL_VERSION:
+        # Per-request metadata belongs to the 2026 lifecycle. Older revisions
+        # continue through initialize without this envelope.
+        return True, _unsupported_protocol(request_id, body_version)
+    method_header = headers.get("mcp-method")
+    if not isinstance(method, str) or method_header != method:
+        return True, _header_mismatch(request_id, "Mcp-Method is required and must match the JSON-RPC method")
+    if method == "tools/call":
+        name = params.get("name")
+        if not isinstance(name, str) or headers.get("mcp-name") != name:
+            return True, _header_mismatch(request_id, "Mcp-Name is required and must match tools/call params.name")
+    return True, None
+
+
+def _record_mcp_method(method: Any) -> None:
+    known = {
+        "initialize": "initialize",
+        "server/discover": "server_discover",
+        "tools/list": "tools_list",
+        "tools/call": "tools_call",
+        "resources/list": "resources_list",
+        "resources/templates/list": "resource_templates_list",
+        "prompts/list": "prompts_list",
+        "ping": "ping",
+        "notifications/initialized": "initialized_notification",
+    }
+    STATS.bump(f"mcp.method.{known.get(method, 'other')}")
+
+
+def handle_mcp(
+    payload: Any,
+    client_ip: str,
+    request_headers: dict[str, str | None] | None = None,
+) -> tuple[int, dict | None]:
     """Dispatch one JSON-RPC message. Returns (http_status, body_or_None)."""
     if isinstance(payload, list):
         STATS.bump("refused.jsonrpc_batch")
@@ -308,23 +440,44 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
     if not isinstance(params, dict):
         return 200, _rpc_error(request_id, -32602, "params must be an object")
 
+    modern, validation_error = _modern_request(payload, params, request_headers)
+    if validation_error is not None:
+        return validation_error
+    _record_mcp_method(method)
+
     if request_id is None:
-        # Notification (e.g. notifications/initialized): accept, no body.
+        # Notification: validate its modern envelope/headers when present, then
+        # honor JSON-RPC's no-response contract.
         return 202, None
 
-    if method == "initialize":
+    if method == "server/discover":
+        STATS.bump("mcp.server_discover")
+        return 200, _rpc_result(
+            request_id,
+            {
+                "supportedVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+                "capabilities": {"tools": {"listChanged": False}},
+                "instructions": INSTRUCTIONS,
+            },
+            modern=True,
+            cacheable=True,
+        )
+    if method == "initialize" and not modern:
         STATS.bump("mcp.initialize")
         requested = str(params.get("protocolVersion", ""))
-        version = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else SUPPORTED_PROTOCOL_VERSIONS[0]
+        version = requested if requested in LEGACY_PROTOCOL_VERSIONS else LEGACY_PROTOCOL_VERSIONS[0]
         return 200, _rpc_result(request_id, {
             "protocolVersion": version,
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": SERVER_INFO,
             "instructions": INSTRUCTIONS,
         })
-    if method == "ping":
+    if method == "ping" and not modern:
         return 200, _rpc_result(request_id, {})
     if method in ("resources/list", "resources/templates/list", "prompts/list"):
+        if modern:
+            STATS.bump("refused.unknown_method")
+            return 404, _rpc_error(request_id, -32601, f"method {method!r} not found")
         # We declare only the tools capability, but registry crawlers and some
         # clients probe these anyway; an empty result reads as "none", while
         # -32601 reads as "broken".
@@ -334,9 +487,14 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
             "resources/templates/list": "resourceTemplates",
             "prompts/list": "prompts",
         }[method]
-        return 200, _rpc_result(request_id, {key: []})
+        return 200, _rpc_result(request_id, {key: []}, modern=modern, cacheable=modern)
     if method == "tools/list":
-        return 200, _rpc_result(request_id, {"tools": _tool_list()})
+        return 200, _rpc_result(
+            request_id,
+            {"tools": _tool_list()},
+            modern=modern,
+            cacheable=modern,
+        )
     if method == "tools/call":
         name = params.get("name")
         entry = TOOLS.get(name) if isinstance(name, str) else None
@@ -349,18 +507,30 @@ def handle_mcp(payload: Any, client_ip: str) -> tuple[int, dict | None]:
         handler = entry[0]
         try:
             result = handler(arguments, client_ip)
-        except (ProductInputError, TierError, OpenBenchError) as error:
-            STATS.tool_call(name, "mcp", "input_error")
-            return 200, _tool_failure(request_id, str(error))
+        except ProductInputError as error:
+            STATS.tool_call(name, "mcp", "input_error", "invalid_input")
+            return 200, _tool_failure(request_id, str(error), modern=modern)
+        except TierError as error:
+            STATS.tool_call(name, "mcp", "input_error", "tier_refusal")
+            return 200, _tool_failure(request_id, str(error), modern=modern)
+        except OpenBenchError as error:
+            outcome = "limited" if error.status >= 429 else "input_error"
+            reason = "rate_limit" if error.status >= 429 else "bench_refusal"
+            STATS.tool_call(name, "mcp", outcome, reason)
+            return 200, _tool_failure(request_id, str(error), modern=modern)
         except Exception as error:  # fail closed without reflecting internals
-            STATS.tool_call(name, "mcp", "internal_error")
+            STATS.tool_call(name, "mcp", "internal_error", "internal_exception")
             print(f"mcp tool {name} failed: {type(error).__name__}", flush=True)
-            return 200, _tool_failure(request_id, "internal processing error")
-        STATS.tool_call(name, "mcp", "ok")
-        return 200, _rpc_result(request_id, {
-            "content": [{"type": "text", "text": json.dumps(result, sort_keys=True, indent=1)}],
-            "structuredContent": result,
-            "isError": False,
-        })
+            return 200, _tool_failure(request_id, "internal processing error", modern=modern)
+        STATS.tool_call(name, "mcp", "ok", "none")
+        return 200, _rpc_result(
+            request_id,
+            {
+                "content": [{"type": "text", "text": json.dumps(result, sort_keys=True, indent=1)}],
+                "structuredContent": result,
+                "isError": False,
+            },
+            modern=modern,
+        )
     STATS.bump("refused.unknown_method")
-    return 200, _rpc_error(request_id, -32601, f"method {method!r} not found")
+    return (404 if modern else 200), _rpc_error(request_id, -32601, f"method {method!r} not found")

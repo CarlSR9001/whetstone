@@ -19,6 +19,7 @@ def run(command: list[str], *, cwd: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--wheel", type=Path, required=True)
+    parser.add_argument("--expected-commit")
     args = parser.parse_args()
     wheel = args.wheel.resolve()
     if not wheel.is_file():
@@ -110,6 +111,16 @@ def main() -> int:
         )
         run([str(python), "-c", smoke], cwd=root)
 
+        installed_commit = subprocess.check_output(
+            [str(python), "-c", "from bcv._version import build_commit; print(build_commit())"],
+            cwd=root,
+            text=True,
+        ).strip()
+        if args.expected_commit and installed_commit != args.expected_commit:
+            raise SystemExit(
+                f"wheel commit {installed_commit!r} does not match expected {args.expected_commit!r}"
+            )
+
         receipt = {
             "wheel": wheel.name,
             "python": str(python),
@@ -118,6 +129,7 @@ def main() -> int:
                 cwd=root,
                 text=True,
             ).strip(),
+            "build_commit": installed_commit,
             "status": "PASS",
         }
         print(json.dumps(receipt, sort_keys=True))

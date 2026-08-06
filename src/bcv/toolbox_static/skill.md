@@ -16,9 +16,11 @@ description: >-
 
 # Whetstone Tools
 
-Whetstone is a promotion gate for AI systems: it decides whether a new version
-genuinely improved, on evidence the system under exam could not have trained
-on. Its workbench and disposable report card are the **public, stateless
+Whetstone is a promotion gate for AI systems: it tests whether a new version
+genuinely improved using declared-exposure audits, paired outcomes, exact
+statistics, and evidence commitments. These controls surface known
+contamination; they do not prove absence from every training corpus. Its
+workbench and disposable report card are the **public, stateless
 demonstration tier**: they load no private exam bank and do not persist request
 payloads or results. Open Promotion Bench is a separate opt-in publication
 surface; it stores only public manifests and sanitized receipts, never task
@@ -34,10 +36,14 @@ https://whetstone.cyberelf.link/ · Agent page: https://whetstone.cyberelf.link/
 session header:
 
 - Endpoint: `POST https://whetstone.cyberelf.link/mcp`
+- Protocols: sessionless `2026-07-28` (`server/discover` plus per-request
+  metadata/headers) and initialize-based `2025-06-18`, `2025-03-26`, and
+  `2024-11-05`. Conforming clients negotiate this automatically.
 - Claude Code: `claude mcp add --transport http whetstone https://whetstone.cyberelf.link/mcp`
 - claude.ai: Settings → Connectors → Add custom connector → the URL above.
-- Raw: POST one JSON-RPC message per request (`initialize`, `tools/list`,
-  `tools/call`). Responses are single `application/json` bodies; no SSE.
+- Raw legacy flow: POST one JSON-RPC message per request (`initialize`,
+  `tools/list`, `tools/call`). Responses are single `application/json` bodies;
+  no SSE.
   Batching is not supported.
 
 **REST (equivalent)** — every Tier 0 tool is also a `POST /api/<name>`
@@ -113,15 +119,16 @@ iff ALL of:
    at n ∈ {7, 8}.
 
 Practical strategy: conjoin the original predicate with a restriction that
-provably restores the claim. Prefer restrictions that keep support large:
-each passing item reports `support_retention` (your match count over the
-original's claim-satisfying match count), and retention below 5% is flagged
-`degenerate_narrowing: true`. A trivially narrow refinement (e.g. forcing tiny
-graphs) passes the checker but the report says so — the diagnostic exists
-precisely because the gate refuses to flatter anyone.
+provably restores the claim. Prefer restrictions that keep support large.
+Checker verification and promotion grade are separate: every verified item
+reports `support_retention` (your match count over the original's
+claim-satisfying match count), and a repair passes only when retention is at
+least 5%. A verified but narrower repair is reported with
+`degenerate_narrowing: true` and does not count as a pass.
 
-The report includes per-item verdicts, per-domain totals, median support
-retention, and SHA-256 commitments over the item set and your answers.
+The report includes per-item `verified` and `passed` verdicts, per-domain
+totals, the disclosed grading policy, median support retention, and SHA-256
+commitments over the item set and your answers.
 
 ## Tier 2 — Open Promotion Bench (compare baseline vs candidate)
 

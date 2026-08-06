@@ -1,0 +1,14 @@
+# The stateless scenario includes conformance-harness-only diagnostic tools.
+# Whetstone intentionally exposes only its product tools, so these checks are
+# not exercisable. Every applicable protocol and wire check remains enforced.
+server:
+  - server-stateless:sep-2575-server-rejects-undeclared-capability
+  - server-stateless:sep-2575-missing-capability-http-400
+  - server-stateless:sep-2575-http-server-no-independent-requests-on-stream
+  - server-stateless:sep-2575-server-no-log-without-loglevel
+  # The caching scenario probes every optional list method even when the
+  # server correctly omits the corresponding capability. Keep tools/list's
+  # cache hints enforced while marking only undeclared surfaces inapplicable.
+  - caching:sep-2549-prompts-list-caching-hints
+  - caching:sep-2549-resources-list-caching-hints
+  - caching:sep-2549-resources-templates-list-caching-hints

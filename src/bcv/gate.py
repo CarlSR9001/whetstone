@@ -216,7 +216,26 @@ def build_gate_report(
         )
     else:
         verdict = "PASS"
-        reasons.append("no regressions, retained probe held, and paired evidence passed the confidence threshold")
+        if regressions == 0:
+            regression_reason = "no regressions"
+        elif policy.regression_policy == "reliability_aware":
+            regression_reason = (
+                f"{len(noisy_regressions)} historically noisy regression(s) stayed within "
+                f"the policy budget of {policy.max_noisy_regressions}"
+            )
+        else:
+            regression_reason = (
+                f"{regressions} regression(s) stayed within the policy limit of "
+                f"{policy.max_regressions}"
+            )
+        retained_reason = (
+            "retained probe held"
+            if policy.require_retained_probe
+            else "retained probe was not required"
+        )
+        reasons.append(
+            f"{regression_reason}; {retained_reason}; paired evidence passed the confidence threshold"
+        )
 
     statuses: dict[str, int] = {}
     for item in bank.items.values():

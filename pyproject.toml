@@ -49,6 +49,12 @@ test = [
   "bitsandbytes",
   "sentencepiece",
 ]
+test-core = [
+  "coverage>=7.6",
+  "pytest>=8",
+  "mcp>=2,<3",
+  "python-chess>=1.999",
+]
 
 [project.scripts]
 whetstone = "bcv.cli:main"

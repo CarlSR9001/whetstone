@@ -46,7 +46,7 @@ def test_release_status_is_atomic_and_machine_readable(tmp_path):
     controller.write_release_status()
     status = json.loads((tmp_path / "forge_release_status.json").read_text(encoding="utf-8"))
     assert status["status"] == "running"
-    assert status["version"] == "0.6.0"
+    assert status["version"] == "0.7.0"
     assert status["build_commit"] == "development"
     assert status["library_sync"] == "not_checked"
     assert status["pid"] > 0

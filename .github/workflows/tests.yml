@@ -74,13 +74,92 @@ jobs:
       - name: Run suite
         run: python -m pytest -q -p no:cacheprovider
 
+  core:
+    name: public core (Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install public test environment
+        run: python -m pip install -e ".[test-core]"
+      - name: Run public contract with coverage floor
+        run: |
+          python -m coverage run \
+            --source=bcv.gate,bcv.product_tools,bcv.ephemeral,bcv.mcp_service,bcv.toolbox_service,bcv.stats \
+            -m pytest -q -p no:cacheprovider \
+            tests/test_cli.py tests/test_gate.py tests/test_mcp_and_report_card.py \
+            tests/test_open_bench.py tests/test_product_tools.py tests/test_service.py \
+            tests/test_stats.py tests/test_toolbox_service.py tests/test_version.py \
+            tests/test_whetstone_mcp.py
+          python -m coverage report --fail-under=80
+
+  mcp-conformance:
+    name: MCP 2026 conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Whetstone core
+        run: python -m pip install -e .
+      - name: Run official MCP conformance scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir="${RUNNER_TEMP}/whetstone-state"
+          log="${RUNNER_TEMP}/whetstone-mcp.log"
+          mkdir -p "${state_dir}" conformance-results
+          WHETSTONE_STATE_DIR="${state_dir}" \
+            python -m bcv.toolbox_service --host 127.0.0.1 --port 8988 >"${log}" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            rc=$?
+            if (( rc != 0 )); then cat "${log}"; fi
+            kill "${server_pid}" 2>/dev/null || true
+            wait "${server_pid}" 2>/dev/null || true
+            trap - EXIT
+            exit "${rc}"
+          }
+          trap cleanup EXIT
+          ready=0
+          for _ in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8988/api/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "${ready}" = 1
+          for scenario in server-stateless tools-list caching http-header-validation; do
+            npx -y @modelcontextprotocol/conformance@0.2.0-alpha.10 server \
+              --url http://127.0.0.1:8988/mcp \
+              --scenario "${scenario}" \
+              --spec-version 2026-07-28 \
+              --expected-failures conformance-baseline.yml \
+              --output-dir "conformance-results/${scenario}"
+          done
+
   wheel:
     name: clean wheel (${{ matrix.os }}, Python ${{ matrix.python }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python: ["3.11", "3.12"]
+        python: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:

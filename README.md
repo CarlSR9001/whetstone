@@ -40,6 +40,21 @@ Install the dependency-light core (CLI and stateless toolbox) with
 `pip install .`. Optional integrations are grouped as `agents`, `engines`, and
 `local-models`; `pip install ".[all]"` installs every integration.
 
+The public HTTP MCP endpoint serves both the sessionless `2026-07-28`
+protocol (`server/discover` plus per-request metadata and headers) and the
+initialize-based `2025-06-18`, `2025-03-26`, and `2024-11-05` revisions. The
+stdlib server remains dependency-free; `mcp>=2,<3` is needed only for SDK
+clients and the stdio adapter.
+
+Tagged releases contain archive-built wheels, source archives, and
+`SHA256SUMS`; GitHub Actions attaches build-provenance attestations. For
+v0.7.0, verify the wheel against the repository with:
+
+```powershell
+gh release download v0.7.0 -R CarlSR9001/whetstone -p "*.whl" -p "SHA256SUMS"
+gh attestation verify .\branching_continual_verification-0.7.0-py3-none-any.whl -R CarlSR9001/whetstone
+```
+
 ## The product layer
 
 The research harness above is operable as a product: one CLI, adapters for any

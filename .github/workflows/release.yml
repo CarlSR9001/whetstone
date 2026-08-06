@@ -1,0 +1,86 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: provenance-attested release
+    if: github.repository == 'CarlSR9001/whetstone'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Validate tag, changelog, and main ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(PYTHONPATH=src python -c 'from bcv._version import __version__; print(__version__)')"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          grep -Fq "## [${version}]" CHANGELOG.md
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+      - name: Install release test environment
+        run: python -m pip install -e ".[test]"
+      - name: Run audited release checks
+        shell: pwsh
+        run: ./scripts/release_check.ps1
+      - name: Build immutable archive artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- dist
+          source_root="${RUNNER_TEMP}/whetstone-release-source"
+          source_tar="${RUNNER_TEMP}/whetstone-release-source.tar"
+          mkdir -p "${source_root}" dist
+          git archive --format=tar --output="${source_tar}" "${GITHUB_SHA}"
+          tar -xf "${source_tar}" -C "${source_root}"
+          python -m build --outdir "${GITHUB_WORKSPACE}/dist" "${source_root}"
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "${wheel}"
+          python scripts/clean_install_smoke.py \
+            --wheel "${wheel}" \
+            --expected-commit "${GITHUB_SHA}"
+          git archive \
+            --format=tar.gz \
+            --prefix="whetstone-${GITHUB_REF_NAME}/" \
+            --output="dist/whetstone-${GITHUB_REF_NAME}-source.tar.gz" \
+            "${GITHUB_SHA}"
+          cd dist
+          sha256sum -- *.whl *.tar.gz > SHA256SUMS
+      - name: Attest release artifacts
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+      - name: Extract release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="${version}" '
+            $0 ~ "^## \\[" version "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}" dist/*
+          --verify-tag
+          --title "Whetstone ${GITHUB_REF_NAME}"
+          --notes-file release-notes.md

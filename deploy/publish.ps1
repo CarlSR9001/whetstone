@@ -66,6 +66,18 @@ function Invoke-TransportChecked {
     }
 }
 
+function ConvertTo-WslPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $full = [System.IO.Path]::GetFullPath($Path)
+    if ($full -notmatch '^([A-Za-z]):\\(.*)$') {
+        throw "WSL transport requires a drive-qualified Windows path: $full"
+    }
+    $drive = $Matches[1].ToLowerInvariant()
+    $tail = $Matches[2].Replace('\', '/')
+    return "/mnt/$drive/$tail"
+}
+
 $repo = Invoke-NativeCapture "git" @("rev-parse", "--show-toplevel")
 $git = @("-c", "safe.directory=$repo", "-C", $repo)
 $branch = Invoke-NativeCapture "git" ($git + @("branch", "--show-current"))
@@ -128,15 +140,18 @@ print(module.build_commit())
     $archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Host "commit=$commit"
     Write-Host "archive_sha256=$archiveSha256"
-    if ($LocalPreflightOnly) {
-        Write-Host "local_preflight=PASS"
-        return
-    }
     $transportArchive = $archive
     $transportInstaller = Join-Path $extract "deploy\install-release.sh"
     if ($SshTransport -eq "Wsl") {
-        $transportArchive = Invoke-NativeCapture "wsl.exe" @("-d", $WslDistribution, "--", "wslpath", "-a", $archive)
-        $transportInstaller = Invoke-NativeCapture "wsl.exe" @("-d", $WslDistribution, "--", "wslpath", "-a", $transportInstaller)
+        $transportArchive = ConvertTo-WslPath $archive
+        $transportInstaller = ConvertTo-WslPath $transportInstaller
+    }
+    if ($LocalPreflightOnly) {
+        if ($SshTransport -eq "Wsl" -and ($transportArchive.Contains('\') -or $transportInstaller.Contains('\'))) {
+            throw "WSL transport path normalization left a Windows separator"
+        }
+        Write-Host "local_preflight=PASS"
+        return
     }
     Invoke-TransportChecked "scp" @($transportArchive, "${SshHost}:$remoteArchive")
     $remoteUploaded = $true

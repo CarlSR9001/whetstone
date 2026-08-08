@@ -78,7 +78,8 @@ powershell.exe -NoProfile -File deploy/publish.ps1 -SshHost vps2 -GitRef HEAD -S
 ```
 
 Use `-SshTransport Native` only when the same host alias and credentials are
-configured in Windows OpenSSH.
+configured in Windows OpenSSH. The WSL transport expects the standard
+`/mnt/<drive>` automount layout.
 
 Or publish from a clean Linux/WSL checkout:
 

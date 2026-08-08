@@ -181,6 +181,10 @@ jobs:
         with:
           version: "0.11.26"
           enable-cache: true
+      - name: Exercise Windows deployment archive preflight
+        if: runner.os == 'Windows' && matrix.python == '3.11'
+        shell: pwsh
+        run: ./deploy/publish.ps1 -LocalPreflightOnly -GitRef HEAD
       - name: Build wheel
         run: |
           uv sync --locked --extra test-core

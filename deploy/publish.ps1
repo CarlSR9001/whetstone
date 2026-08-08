@@ -12,6 +12,8 @@ param(
     [ValidatePattern('^[A-Za-z0-9._-]+$')]
     [string]$WslDistribution = "Ubuntu",
 
+    [switch]$LocalPreflightOnly,
+
     [ValidateSet("auto", "active", "inactive")]
     [string]$RollbackForgeState = $(
         if ($env:WHETSTONE_EXPECT_FORGE_ACTIVE) {
@@ -69,22 +71,24 @@ $git = @("-c", "safe.directory=$repo", "-C", $repo)
 $branch = Invoke-NativeCapture "git" ($git + @("branch", "--show-current"))
 $commit = Invoke-NativeCapture "git" ($git + @("rev-parse", "--verify", "$GitRef^{commit}"))
 
-if ($branch -ne "main") {
-    throw "releases must be cut from main (current branch: $branch)"
-}
 $workingTree = Invoke-NativeCapture "git" ($git + @("status", "--porcelain=v1", "--untracked-files=all"))
 if ($workingTree) {
     throw "working tree is not clean"
 }
 
-& git @git "merge-base" "--is-ancestor" $commit "main"
-if ($LASTEXITCODE -ne 0) {
-    throw "target commit is not on main: $commit"
-}
-Invoke-NativeChecked "git" ($git + @("fetch", "--quiet", "origin", "main"))
-& git @git "merge-base" "--is-ancestor" $commit "origin/main"
-if ($LASTEXITCODE -ne 0) {
-    throw "target commit is not present on public origin/main: $commit"
+if (-not $LocalPreflightOnly) {
+    if ($branch -ne "main") {
+        throw "releases must be cut from main (current branch: $branch)"
+    }
+    & git @git "merge-base" "--is-ancestor" $commit "main"
+    if ($LASTEXITCODE -ne 0) {
+        throw "target commit is not on main: $commit"
+    }
+    Invoke-NativeChecked "git" ($git + @("fetch", "--quiet", "origin", "main"))
+    & git @git "merge-base" "--is-ancestor" $commit "origin/main"
+    if ($LASTEXITCODE -ne 0) {
+        throw "target commit is not present on public origin/main: $commit"
+    }
 }
 
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
@@ -112,7 +116,11 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 print(module.build_commit())
 '@
-    $embeddedCommit = Invoke-NativeCapture "python" @("-c", $provenanceScript, $versionFile)
+    $embeddedOutput = @($provenanceScript | & python - $versionFile)
+    if ($LASTEXITCODE -ne 0) {
+        throw "python archive provenance check failed with exit code $LASTEXITCODE"
+    }
+    $embeddedCommit = ($embeddedOutput -join [Environment]::NewLine).Trim()
     if ($embeddedCommit -ne $commit) {
         throw "local archive provenance '$embeddedCommit' does not match $commit"
     }
@@ -120,6 +128,10 @@ print(module.build_commit())
     $archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Host "commit=$commit"
     Write-Host "archive_sha256=$archiveSha256"
+    if ($LocalPreflightOnly) {
+        Write-Host "local_preflight=PASS"
+        return
+    }
     $transportArchive = $archive
     $transportInstaller = Join-Path $extract "deploy\install-release.sh"
     if ($SshTransport -eq "Wsl") {

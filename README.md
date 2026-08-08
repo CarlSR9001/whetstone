@@ -1,3 +1,4 @@
+<!-- mcp-name: link.cyberelf.whetstone/tools -->
 # whetstone
 
 **Two learners grinding each other sharp: a student that must earn every
@@ -31,6 +32,10 @@ Selected results (full ledger with methods, nulls, and receipts in
   8->20/48 while every stock model scored 0/24 on graph repairs; the task-routed
   verifier-trained FastContext-4B scored 28/48 and earned PASS over its 22/48
   base (6 gains, 0 regressions, exact p=.03125), repeated identically three times.
+- Trained the first trajectory-disjoint Gen-4 engine student on 1,313 fresh
+  Stockfish/KataGo examples. Three fresh loads moved 7/69 -> 8/69, but the
+  item-level gate correctly BLOCKED promotion: 3 gains, 2 regressions, exact
+  p=1.0, including one historically stable regression. No promotion is claimed.
 - The private promotion exam bank is deliberately NOT in this repo: publishing it
   would let future models train on it — the leakage rule at internet scale.
 
@@ -46,13 +51,13 @@ initialize-based `2025-06-18`, `2025-03-26`, and `2024-11-05` revisions. The
 stdlib server remains dependency-free; `mcp>=2,<3` is needed only for SDK
 clients and the stdio adapter.
 
-Tagged releases contain archive-built wheels, source archives, and
-`SHA256SUMS`; GitHub Actions attaches build-provenance attestations. For
-v0.7.0, verify the wheel against the repository with:
+Tagged releases contain archive-built wheels, source archives, SPDX 2.3 SBOMs,
+and `SHA256SUMS`; GitHub Actions attaches build-provenance attestations to every
+release artifact. For v0.8.0, verify the wheel against the repository with:
 
 ```powershell
-gh release download v0.7.0 -R CarlSR9001/whetstone -p "*.whl" -p "SHA256SUMS"
-gh attestation verify .\branching_continual_verification-0.7.0-py3-none-any.whl -R CarlSR9001/whetstone
+gh release download v0.8.0 -R CarlSR9001/whetstone -p "*.whl" -p "*.spdx.json" -p "SHA256SUMS"
+gh attestation verify .\branching_continual_verification-0.8.0-py3-none-any.whl -R CarlSR9001/whetstone
 ```
 
 ## The product layer
@@ -73,6 +78,9 @@ python -m bcv.cli redteam                                # hostile self-test; no
 python -m bcv.cli serve --port 8977                      # localhost JSON service
 python -m bcv.cli mcp                                    # MCP server (also in .mcp.json)
 python -m bcv.cli inspect --exam exam.jsonl --exposure exposure.jsonl --baseline v1.json --candidate v2.json
+python -m bcv.cli hosted-report-card --command "python my_agent.py" --out report-card.json
+python -m bcv.cli open-bench-run --baseline-command "python v1.py" --candidate-command "python v2.py"
+python -m bcv.cli verify-receipt --receipt report-card.json
 python -m bcv.cli toolbox --port 8988                    # eight stateless tools on localhost
 ```
 
@@ -103,6 +111,15 @@ regressions, and ties before issuing PASS/HOLD/BLOCK. A submitter may explicitly
 publish a self-attested sanitized receipt. The ledger stores manifests,
 transitions, counts, and hashes only—never task contents or answer patches—so
 the existing workbench/report-card non-retention boundary remains intact.
+
+Hosted report-card and Open Bench receipts are challenge-bound and signed with
+an Ed25519 SSHSIG key. The one-command runners above fetch the HTTPS key bundle,
+verify the issuer, challenge, content commitment, signature, and expiry, then
+write the receipt. A valid signature authenticates Whetstone's grading result
+and deployed build; it does not authenticate a caller-supplied model or harness
+name. Runners fail closed on unsigned receipts unless `--allow-unsigned` is
+explicitly used for a local development service. Busy report-card submissions
+are retryable without consuming the session.
 
 Support-panel minting currently fails closed by default: the lexical checker
 passed its clean smoke corpus but failed 13/13 adversarial cases, so it cannot

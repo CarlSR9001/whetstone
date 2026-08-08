@@ -29,6 +29,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from bcv.ratelimit import BENCH_PUBLISH_LIMIT, BENCH_START_LIMIT, BENCH_SUBMIT_LIMIT
+from bcv.receipts import attest_receipt, session_challenge
 from bcv.stats import STATS
 
 BENCHMARK_ID = "whetstone-open-promotion-bench"
@@ -444,7 +445,11 @@ class OpenPromotionBench:
         for session_id in [key for key, value in self.sessions.items() if value["expires_at"] <= now]:
             del self.sessions[session_id]
 
-    def start_session(self, client_ip: str) -> dict:
+    def start_session(self, client_ip: str, challenge: object = None) -> dict:
+        try:
+            challenge_value = session_challenge(challenge)
+        except ValueError as error:
+            raise OpenBenchError(str(error)) from error
         if self.enforce_limits and not BENCH_START_LIMIT.allow(client_ip):
             STATS.bump("open_bench.refused_start_limit")
             raise OpenBenchError("benchmark session limit reached for this address; try again later", status=429)
@@ -462,6 +467,7 @@ class OpenPromotionBench:
                 "cohort_sha256": cohort_sha256,
                 "created_at": now,
                 "expires_at": now + self.session_ttl,
+                "challenge": challenge_value,
             }
         STATS.bump("open_bench.sessions")
         return {
@@ -469,6 +475,7 @@ class OpenPromotionBench:
             "benchmark_version": BENCHMARK_VERSION,
             "track": "self_attested_procedural",
             "session_id": session_id,
+            "challenge": challenge_value,
             "expires_in_seconds": int(self.session_ttl),
             "cohort_sha256": cohort_sha256,
             "tasks": public_tasks,
@@ -583,7 +590,7 @@ class OpenPromotionBench:
                 "patches graded; it does not independently prove model identity, training exposure, or general capability."
             ),
         }
-        receipt["receipt_sha256"] = _sha256(receipt)
+        receipt["grading_evidence_sha256"] = _sha256(receipt)
         publication = {"status": "not_requested", "public_id": None}
         if publish:
             if self.enforce_limits and not BENCH_PUBLISH_LIMIT.allow(client_ip):
@@ -592,7 +599,7 @@ class OpenPromotionBench:
             elif self.ledger_path is None:
                 publication = {"status": "unavailable", "public_id": None}
             else:
-                public_id = f"opb_{receipt['receipt_sha256'][:16]}"
+                public_id = f"opb_{receipt['grading_evidence_sha256'][:16]}"
                 record = copy.deepcopy(receipt)
                 # Failure codes may contain a submitted path. Public receipts
                 # retain the exact pass/fail transition, but never an answer-
@@ -603,20 +610,41 @@ class OpenPromotionBench:
                             "passed": item[arm]["passed"],
                             "changed_files": item[arm]["changed_files"],
                         }
+                record["source_evidence_sha256"] = record.pop("grading_evidence_sha256")
                 record["public_id"] = public_id
                 record["published_at_unix"] = int(now)
-                try:
-                    self._append_record(record)
-                except (OpenBenchError, OSError):
-                    # Grading has already completed and the one-shot session is
-                    # spent. A full or unavailable public ledger must not throw
-                    # away the user's private receipt.
+                attest_receipt(
+                    record,
+                    "open_bench_public",
+                    challenge=session["challenge"],
+                    now=int(now),
+                )
+                if record.get("attestation", {}).get("status") != "signed":
                     publication = {"status": "unavailable", "public_id": None}
-                    STATS.bump("open_bench.publication_unavailable")
+                    STATS.bump("open_bench.publication_signing_unavailable")
                 else:
-                    publication = {"status": "published", "public_id": public_id}
-                    STATS.bump("open_bench.published")
+                    try:
+                        self._append_record(record)
+                    except (OpenBenchError, OSError):
+                        # Grading has already completed and the one-shot session is
+                        # spent. A full or unavailable public ledger must not throw
+                        # away the user's private receipt.
+                        publication = {"status": "unavailable", "public_id": None}
+                        STATS.bump("open_bench.publication_unavailable")
+                    else:
+                        publication = {
+                            "status": "published",
+                            "public_id": public_id,
+                            "public_receipt_sha256": record["receipt_sha256"],
+                        }
+                        STATS.bump("open_bench.published")
         receipt["publication"] = publication
+        attest_receipt(
+            receipt,
+            "open_bench_private",
+            challenge=session["challenge"],
+            now=int(now),
+        )
         STATS.bump("open_bench.graded")
         STATS.bump(f"open_bench.verdict.{verdict.lower()}")
         return receipt

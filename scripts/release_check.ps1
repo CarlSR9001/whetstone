@@ -30,8 +30,17 @@ try {
     Assert-NativeSuccess "node --check app.js"
     node --check src/bcv/toolbox_static/benchmark.js
     Assert-NativeSuccess "node --check benchmark.js"
-    bash -n deploy/install-release.sh deploy/publish.sh
+    bash -n deploy/install-release.sh deploy/publish.sh scripts/run_gen4_wsl.sh scripts/setup_gen4_wsl.sh
     Assert-NativeSuccess "bash -n"
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile(
+        (Join-Path $repo "deploy/publish.ps1"),
+        [ref]$null,
+        [ref]$parseErrors
+    )
+    if ($parseErrors.Count -gt 0) {
+        throw "deploy/publish.ps1 failed PowerShell syntax validation: $($parseErrors[0].Message)"
+    }
     & "$PSScriptRoot/audit_publication.ps1" -IncludeUntracked
     Assert-NativeSuccess "publication audit"
 

@@ -21,10 +21,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from bcv._version import __version__, build_commit
-from bcv.ephemeral import ensure_started, hatchery
+from bcv.ephemeral import TierError, ensure_started, hatchery
 from bcv.mcp_service import SUPPORTED_PROTOCOL_VERSIONS, handle_mcp
 from bcv.open_bench import OpenBenchError, open_bench
 from bcv.ratelimit import GENERAL_LIMIT, HUNTER_LIMIT, HUNTER_SLOT, SlidingWindowLimit  # noqa: F401 (re-exported)
+from bcv.receipts import receipt_key_bundle, signing_status
 from bcv.stats import STATS
 from bcv.product_tools import (
     ProductInputError,
@@ -173,9 +174,11 @@ def _openapi_spec() -> dict:
         "/api/catalog": {"get": {"operationId": "listTools", "summary": "Catalog of the eight stateless verifier tools.", "responses": {"200": {"description": "OK"}}}},
         "/api/examples": {"get": {"operationId": "getExamples", "summary": "A complete, valid request payload for every tool.", "responses": {"200": {"description": "OK"}}}},
         "/api/stats": {"get": {"operationId": "getStats", "summary": "Aggregate, privacy-preserving usage counters.", "responses": {"200": {"description": "OK"}}}},
+        "/api/report-card/start": {"post": {"operationId": "reportCardStart", "summary": "Start a disposable checker-graded report card.", "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object", "properties": {"challenge": {"type": "string", "minLength": 8, "maxLength": 128}}, "additionalProperties": False}}}}, "responses": {"200": {"description": "One-shot session and items"}, "429": {"description": "Rate limited or warming"}}}},
+        "/api/report-card/submit": {"post": {"operationId": "reportCardSubmit", "summary": "Grade a report card and issue a signed receipt.", "responses": {"200": {"description": "Signed checker result"}, "400": {"description": "Input error"}, "429": {"description": "Retryable contention or limit"}}}},
         "/api/open-bench/leaderboard": {"get": {"operationId": "openBenchLeaderboard", "summary": "Opt-in, self-attested public Open Promotion Bench receipts.", "responses": {"200": {"description": "OK"}}}},
         "/api/open-bench/receipt/{public_id}": {"get": {"operationId": "openBenchReceipt", "summary": "One sanitized public benchmark receipt.", "parameters": [{"name": "public_id", "in": "path", "required": True, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}, "404": {"description": "Not found"}}}},
-        "/api/open-bench/start": {"post": {"operationId": "openBenchStart", "summary": "Start a paired six-item scope-integrity cohort.", "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": False}}}}, "responses": {"200": {"description": "One-shot session and tasks"}, "429": {"description": "Rate limited"}}}},
+        "/api/open-bench/start": {"post": {"operationId": "openBenchStart", "summary": "Start a paired six-item scope-integrity cohort.", "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object", "properties": {"challenge": {"type": "string", "minLength": 8, "maxLength": 128}}, "additionalProperties": False}}}}, "responses": {"200": {"description": "One-shot session and tasks"}, "429": {"description": "Rate limited"}}}},
         "/api/open-bench/submit": {"post": {"operationId": "openBenchSubmit", "summary": "Grade paired baseline/candidate patches and optionally publish a sanitized receipt.", "responses": {"200": {"description": "PASS/HOLD/BLOCK receipt"}, "400": {"description": "Input error"}, "429": {"description": "Rate limited"}}}},
         "/mcp": {"post": {"operationId": "mcp", "summary": "MCP endpoint (Streamable HTTP JSON-RPC 2.0). Includes Tier 0 tools, the disposable report card, and Open Promotion Bench.", "responses": {"200": {"description": "JSON-RPC response"}}}},
     }
@@ -240,6 +243,8 @@ REST_TOOL_NAMES = {
     "/api/memory": "memory_relevance",
     "/api/replay": "replay_trace",
     "/api/counterexample": "counterexample_hunt",
+    "/api/report-card/start": "report_card_start",
+    "/api/report-card/submit": "report_card_submit",
     "/api/open-bench/start": "open_bench_start",
     "/api/open-bench/submit": "open_bench_submit",
 }
@@ -338,6 +343,7 @@ class ToolboxHandler(BaseHTTPRequestHandler):
                 "mcp_endpoint": "/mcp",
                 "report_card": hatchery().status(),
                 "open_bench": open_bench().status(),
+                "receipt_signing": signing_status(),
             })
         if path == "/mcp":
             return self._json(405, {
@@ -352,6 +358,9 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             return self._json(200, examples())
         if path == "/api/evidence":
             return self._json(200, evidence())
+        if path == "/.well-known/whetstone-receipt-keys.json":
+            bundle = receipt_key_bundle()
+            return self._json(200, bundle) if bundle["keys"] else self._json(404, {"error": "receipt keys not configured"})
         if path == "/api/open-bench/leaderboard":
             return self._json(200, open_bench().leaderboard())
         if path.startswith("/api/open-bench/receipt/"):
@@ -457,10 +466,19 @@ class ToolboxHandler(BaseHTTPRequestHandler):
         tool_name = REST_TOOL_NAMES.get(path, "")
         acquired = False
         try:
-            if path == "/api/open-bench/start":
-                if payload:
-                    raise OpenBenchError("open benchmark start takes an empty JSON object")
-                result = open_bench().start_session(client_ip)
+            if path == "/api/report-card/start":
+                if set(payload) - {"challenge"}:
+                    raise TierError("report-card start accepts only an optional challenge")
+                result = hatchery().start_session(client_ip, payload.get("challenge"))
+            elif path == "/api/report-card/submit":
+                session_id = payload.get("session_id")
+                if not isinstance(session_id, str) or not session_id:
+                    raise TierError("session_id (string) is required")
+                result = hatchery().submit(session_id, payload.get("answers") or {}, client_ip)
+            elif path == "/api/open-bench/start":
+                if set(payload) - {"challenge"}:
+                    raise OpenBenchError("open benchmark start accepts only an optional challenge")
+                result = open_bench().start_session(client_ip, payload.get("challenge"))
             elif path == "/api/open-bench/submit":
                 result = open_bench().submit(payload, client_ip)
             elif path == "/api/counterexample":
@@ -481,6 +499,19 @@ class ToolboxHandler(BaseHTTPRequestHandler):
             result["request_id"] = request_id
             STATS.tool_call(tool_name, "rest", "ok", "none")
             return self._json(200, result)
+        except TierError as error:
+            status = 429 if error.retryable else 400
+            outcome = "limited" if error.retryable else "input_error"
+            reason = "busy" if error.retry_after_seconds is not None else "tier_refusal"
+            STATS.tool_call(tool_name, "rest", outcome, reason)
+            body = {
+                "error": str(error),
+                "retryable": error.retryable,
+                "request_id": request_id,
+            }
+            if error.retry_after_seconds is not None:
+                body["retry_after_seconds"] = error.retry_after_seconds
+            return self._json(status, body)
         except OpenBenchError as error:
             outcome = "limited" if error.status >= 429 else "input_error"
             reason = "rate_limit" if error.status >= 429 else "bench_refusal"

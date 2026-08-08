@@ -39,7 +39,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: "3.11"
     - id: inspect
@@ -47,17 +47,17 @@ runs:
       run: |
         set +e
         python -m bcv.cli inspect \
-          --exam "${{ inputs.exam }}" \
-          --exposure "${{ inputs.exposure }}" \
-          --baseline "${{ inputs.baseline }}" \
-          --candidate "${{ inputs.candidate }}" \
-          --alpha "${{ inputs.alpha }}" \
-          --min-gains "${{ inputs['min-gains'] }}" \
-          --max-regressions "${{ inputs['max-regressions'] }}" \
-          --out "${{ inputs.receipt }}"
+          --exam "$WHETSTONE_EXAM" \
+          --exposure "$WHETSTONE_EXPOSURE" \
+          --baseline "$WHETSTONE_BASELINE" \
+          --candidate "$WHETSTONE_CANDIDATE" \
+          --alpha "$WHETSTONE_ALPHA" \
+          --min-gains "$WHETSTONE_MIN_GAINS" \
+          --max-regressions "$WHETSTONE_MAX_REGRESSIONS" \
+          --out "$RECEIPT"
         code=$?
         echo "$code" > .whetstone-exit-code
-        if [[ -f "${{ inputs.receipt }}" ]]; then
+        if [[ -f "$RECEIPT" ]]; then
           python -c 'import json,os; r=json.load(open(os.environ["RECEIPT"], encoding="utf-8")); print("verdict="+r["gate"]["verdict"])' >> "$GITHUB_OUTPUT"
         else
           echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
@@ -66,8 +66,15 @@ runs:
       env:
         PYTHONPATH: ${{ github.action_path }}/../../../src
         RECEIPT: ${{ inputs.receipt }}
+        WHETSTONE_EXAM: ${{ inputs.exam }}
+        WHETSTONE_EXPOSURE: ${{ inputs.exposure }}
+        WHETSTONE_BASELINE: ${{ inputs.baseline }}
+        WHETSTONE_CANDIDATE: ${{ inputs.candidate }}
+        WHETSTONE_ALPHA: ${{ inputs.alpha }}
+        WHETSTONE_MIN_GAINS: ${{ inputs['min-gains'] }}
+        WHETSTONE_MAX_REGRESSIONS: ${{ inputs['max-regressions'] }}
     - if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: whetstone-promotion-receipt
         path: ${{ inputs.receipt }}

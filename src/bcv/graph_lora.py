@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import json
 import re
+import shutil
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -27,6 +30,9 @@ class GraphAdapterTrainResult:
     device: str
     failure: str | None = None
     skipped_steps: int = 0
+    steps_completed: int = 0
+    resumed_from_step: int = 0
+    checkpoints_written: int = 0
 
 
 @dataclass(frozen=True)
@@ -81,12 +87,18 @@ def train_graph_adapter(
     heldout_path: str | Path | None = None,
     mask_prompt_loss: bool = True,
     model_name: str = FASTCONTEXT,
+    checkpoint_every_steps: int = 0,
+    resume: bool = False,
 ) -> GraphAdapterTrainResult:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     dataset_path = Path(dataset_path)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     adapter_path = output_dir / "fastcontext_graph_repair_lora"
+    checkpoints = output_dir / "checkpoints"
+    cursor = 0
+    resumed_from_step = 0
+    checkpoints_written = 0
     try:
         examples = _load_examples(dataset_path)
         if heldout_path is not None or heldout_examples <= 0:
@@ -97,61 +109,154 @@ def train_graph_adapter(
         if not train_examples:
             raise RuntimeError(f"no training examples found in {dataset_path}")
 
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "examples": train_examples,
+                    "epochs": epochs,
+                    "max_length": max_length,
+                    "lora_r": lora_r,
+                    "lora_alpha": lora_alpha,
+                    "mask_prompt_loss": mask_prompt_loss,
+                    "model_name": model_name,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        resume_payload = None
+        resume_adapter = None
+        latest_path = checkpoints / "latest.json"
+        if resume and latest_path.is_file():
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            step_dir = checkpoints / latest["step_directory"]
+            resume_payload = torch.load(step_dir / "state.pt", map_location="cpu", weights_only=False)
+            if resume_payload.get("fingerprint") != fingerprint:
+                raise RuntimeError("training checkpoint does not match dataset or hyperparameters")
+            resume_adapter = step_dir / "adapter"
+
         tokenizer = load_tokenizer(model_name)
         model = load_causal_lm_4bit(model_name)
         model.config.use_cache = False
         model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(
-            model,
-            LoraConfig(
-                r=lora_r,
-                lora_alpha=lora_alpha,
-                target_modules=("q_proj", "k_proj", "v_proj", "o_proj"),
-                lora_dropout=0.05,
-                bias="none",
-                task_type="CAUSAL_LM",
-            ),
-        )
+        if resume_adapter is not None:
+            model = PeftModel.from_pretrained(model, resume_adapter, is_trainable=True)
+        else:
+            model = get_peft_model(
+                model,
+                LoraConfig(
+                    r=lora_r,
+                    lora_alpha=lora_alpha,
+                    target_modules=("q_proj", "k_proj", "v_proj", "o_proj"),
+                    lora_dropout=0.05,
+                    bias="none",
+                    task_type="CAUSAL_LM",
+                ),
+            )
         model.train()
         optimizer = torch.optim.AdamW(model.parameters(), lr=1.5e-4)
         final_loss = None
         skipped_examples = 0
-        for _ in range(epochs):
-            for example in train_examples:
-                text = _messages_to_text(example["messages"])
-                batch = tokenizer(text, return_tensors="pt", max_length=max_length, truncation=True)
-                batch = {key: value.to(model.device) for key, value in batch.items()}
-                labels = batch["input_ids"].clone()
-                if mask_prompt_loss:
-                    # Supervise only the assistant completion. Without this, long
-                    # evidence prompts dominate the loss and the adapter learns to
-                    # regurgitate prompts instead of producing repairs.
-                    prompt_length = tokenizer(
-                        _prompt_from_example(example),
-                        max_length=max_length,
-                        truncation=True,
-                    )["input_ids"]
-                    labels[0, : min(len(prompt_length), labels.shape[1])] = -100
-                if not (labels != -100).any():
-                    # Truncation swallowed the completion; training on this example
-                    # would yield a NaN loss and teach nothing.
-                    skipped_examples += 1
-                    continue
-                batch["labels"] = labels
-                optimizer.zero_grad(set_to_none=True)
-                loss = model(**batch).loss
-                if not torch.isfinite(loss):
-                    skipped_examples += 1
-                    continue
-                loss.backward()
-                optimizer.step()
-                final_loss = float(loss.detach().cpu())
+        if resume_payload is not None:
+            cursor = int(resume_payload["cursor"])
+            resumed_from_step = cursor
+            final_loss = resume_payload.get("final_loss")
+            skipped_examples = int(resume_payload.get("skipped_steps", 0))
+            optimizer.load_state_dict(resume_payload["optimizer"])
+            for state in optimizer.state.values():
+                for key, value in state.items():
+                    if torch.is_tensor(value):
+                        state[key] = value.to(model.device)
+            torch.set_rng_state(resume_payload["torch_rng_state"])
+            if torch.cuda.is_available() and resume_payload.get("cuda_rng_states") is not None:
+                torch.cuda.set_rng_state_all(resume_payload["cuda_rng_states"])
+
+        def save_checkpoint() -> None:
+            nonlocal checkpoints_written
+            step_dir = checkpoints / f"step-{cursor:08d}"
+            checkpoints.mkdir(parents=True, exist_ok=True)
+            if step_dir.exists():
+                if not (step_dir / "adapter").is_dir() or not (step_dir / "state.pt").is_file():
+                    raise RuntimeError(f"incomplete immutable checkpoint: {step_dir}")
+            else:
+                staging = Path(tempfile.mkdtemp(prefix=f".{step_dir.name}-", dir=checkpoints))
+                try:
+                    model.save_pretrained(staging / "adapter")
+                    torch.save(
+                        {
+                            "schema_version": 1,
+                            "fingerprint": fingerprint,
+                            "cursor": cursor,
+                            "final_loss": final_loss,
+                            "skipped_steps": skipped_examples,
+                            "optimizer": optimizer.state_dict(),
+                            "torch_rng_state": torch.get_rng_state(),
+                            "cuda_rng_states": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                        },
+                        staging / "state.pt",
+                    )
+                    staging.replace(step_dir)
+                finally:
+                    if staging.exists():
+                        shutil.rmtree(staging)
+                checkpoints_written += 1
+            latest_tmp = latest_path.with_suffix(".tmp")
+            latest_tmp.write_text(
+                json.dumps({"step_directory": step_dir.name}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            latest_tmp.replace(latest_path)
+
+        total_steps = epochs * len(train_examples)
+        for step_index in range(total_steps):
+            if step_index < resumed_from_step:
+                continue
+            example = train_examples[step_index % len(train_examples)]
+            text = _messages_to_text(example["messages"])
+            batch = tokenizer(text, return_tensors="pt", max_length=max_length, truncation=True)
+            batch = {key: value.to(model.device) for key, value in batch.items()}
+            labels = batch["input_ids"].clone()
+            if mask_prompt_loss:
+                # Supervise only the assistant completion. Without this, long
+                # evidence prompts dominate the loss and the adapter learns to
+                # regurgitate prompts instead of producing repairs.
+                prompt_length = tokenizer(
+                    _prompt_from_example(example),
+                    max_length=max_length,
+                    truncation=True,
+                )["input_ids"]
+                labels[0, : min(len(prompt_length), labels.shape[1])] = -100
+            if not (labels != -100).any():
+                # Truncation swallowed the completion; training on this example
+                # would yield a NaN loss and teach nothing.
+                skipped_examples += 1
+                cursor = step_index + 1
+                if checkpoint_every_steps > 0 and cursor % checkpoint_every_steps == 0:
+                    save_checkpoint()
+                continue
+            batch["labels"] = labels
+            optimizer.zero_grad(set_to_none=True)
+            loss = model(**batch).loss
+            if not torch.isfinite(loss):
+                skipped_examples += 1
+                cursor = step_index + 1
+                if checkpoint_every_steps > 0 and cursor % checkpoint_every_steps == 0:
+                    save_checkpoint()
+                continue
+            loss.backward()
+            optimizer.step()
+            final_loss = float(loss.detach().cpu())
+            cursor = step_index + 1
+            if checkpoint_every_steps > 0 and cursor % checkpoint_every_steps == 0:
+                save_checkpoint()
 
         if final_loss is None:
             raise RuntimeError(
                 f"every training step was skipped ({skipped_examples} skips); "
                 f"prompts likely exceed max_length={max_length}"
             )
+        if checkpoint_every_steps > 0:
+            save_checkpoint()
         model.save_pretrained(adapter_path)
         tokenizer.save_pretrained(adapter_path)
         result = GraphAdapterTrainResult(
@@ -168,6 +273,9 @@ def train_graph_adapter(
             final_loss=final_loss,
             device=device,
             skipped_steps=skipped_examples,
+            steps_completed=cursor,
+            resumed_from_step=resumed_from_step,
+            checkpoints_written=checkpoints_written,
         )
     except Exception as exc:
         result = GraphAdapterTrainResult(
@@ -180,7 +288,16 @@ def train_graph_adapter(
             final_loss=None,
             device=device,
             failure=f"{type(exc).__name__}: {exc}",
+            steps_completed=cursor,
+            resumed_from_step=resumed_from_step,
+            checkpoints_written=checkpoints_written,
         )
+    finally:
+        if "model" in locals():
+            del model
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     (output_dir / "train_result.json").write_text(
         json.dumps(asdict(result), indent=2, sort_keys=True),
         encoding="utf-8",

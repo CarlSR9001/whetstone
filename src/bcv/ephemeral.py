@@ -27,15 +27,23 @@ import threading
 import time
 
 from bcv.ratelimit import GRADE_SLOT, REPORT_START_LIMIT, REPORT_SUBMIT_LIMIT
+from bcv.receipts import attest_receipt, session_challenge
 from bcv.stats import STATS
 
 
 class TierError(ValueError):
     """User-visible refusal (limits, warm-up, bad session). Safe to echo."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        retry_after_seconds: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.retry_after_seconds = retry_after_seconds
 
 
 SESSION_TTL_SECONDS = 900.0
@@ -245,9 +253,17 @@ class Hatchery:
             raise TierError("report cards are unavailable: warm-up failed; the operator has been notified")
         if not self.ready:
             STATS.bump("report_card.refused_warming")
-            raise TierError("the exam hatchery is still warming up; retry in about a minute", retryable=True)
+            raise TierError(
+                "the exam hatchery is still warming up; retry in about a minute",
+                retryable=True,
+                retry_after_seconds=10,
+            )
 
-    def start_session(self, client_ip: str) -> dict:
+    def start_session(self, client_ip: str, challenge: object = None) -> dict:
+        try:
+            challenge_value = session_challenge(challenge)
+        except ValueError as error:
+            raise TierError(str(error)) from error
         self._refresh_if_library_changed()
         with self.lock:
             self._require_ready_locked()
@@ -292,10 +308,12 @@ class Hatchery:
                 "created_at": now,
                 "expires_at": now + self.session_ttl,
                 "client_ip": client_ip,
+                "challenge": challenge_value,
             }
         STATS.bump("report_card.sessions")
         return {
             "session_id": session_id,
+            "challenge": challenge_value,
             "expires_in_seconds": int(self.session_ttl),
             "items": served,
             "how_to_answer": (
@@ -317,19 +335,27 @@ class Hatchery:
     def submit(self, session_id: str, answers: dict, client_ip: str) -> dict:
         if not isinstance(answers, dict):
             raise TierError("answers must be an object mapping item_id to your answer text")
-        if not REPORT_SUBMIT_LIMIT.allow(client_ip):
-            raise TierError("grading limit reached for this address; try again later")
         now = time.time()
         with self.lock:
             self._sweep_locked(now)
-            session = self.sessions.pop(session_id, None)  # one-shot: gone even if grading fails
+            session = self.sessions.get(session_id)
         if session is None:
             raise TierError("unknown or expired session (sessions are one-shot and time out)")
         if not GRADE_SLOT.acquire(blocking=False):
-            # The session is spent — deliberately. A caller who hits the busy
-            # slot restarts a session rather than queueing CPU work.
-            raise TierError("grading worker is busy and this session is now spent; start a new session", retryable=True)
+            STATS.bump("report_card.refused_busy")
+            raise TierError(
+                "grading worker is busy; this session is preserved, retry the same submission shortly",
+                retryable=True,
+                retry_after_seconds=2,
+            )
         try:
+            if not REPORT_SUBMIT_LIMIT.allow(client_ip):
+                raise TierError("grading limit reached for this address; try again later")
+            with self.lock:
+                self._sweep_locked(time.time())
+                session = self.sessions.pop(session_id, None)
+            if session is None:
+                raise TierError("unknown or expired session (sessions are one-shot and time out)")
             return self._grade(session, answers, now)
         finally:
             GRADE_SLOT.release()
@@ -389,7 +415,9 @@ class Hatchery:
             STATS.retention_bucket(retention)
         item_ids = sorted(session["items"])
         answer_blob = json.dumps({key: answers.get(key) for key in item_ids}, sort_keys=True, default=str)
-        return {
+        result = {
+            "track": "disposable_public_practice",
+            "identity_verified": False,
             "passed": passed,
             "verified": verified,
             "total": total,
@@ -423,7 +451,18 @@ class Hatchery:
             "graded_at_unix": int(now),
             "disposable_cohort": True,
             "session_spent": True,
+            "claim_boundary": (
+                "The signature authenticates Whetstone's checker result for this disposable public "
+                "cohort. It does not independently authenticate the answering model or establish a "
+                "private-bank capability credential."
+            ),
         }
+        return attest_receipt(
+            result,
+            "report_card",
+            challenge=session["challenge"],
+            now=int(now),
+        )
 
 
 _HATCHERY: Hatchery | None = None

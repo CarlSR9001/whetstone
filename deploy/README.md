@@ -38,6 +38,25 @@ Switching `current` is atomic. Tools and forge import from that same immutable
 release; their persistent state remains outside it. A release never overwrites
 another release or the personal site.
 
+## Receipt signing key
+
+The installer creates one persistent Ed25519 key at
+`/var/lib/whetstone-tools/receipt_signing_key` when none exists; later releases
+reuse it and add its public key to
+`/var/lib/whetstone-tools/receipt_trusted_keys`. The private key is mode 0600,
+owned by the unprivileged service user, and never enters a source archive or
+release environment file. Public and retired keys are served at
+`/.well-known/whetstone-receipt-keys.json`.
+
+For rotation, stop the toolbox, generate a replacement at the same path as the
+service user, retain the old public key in `receipt_trusted_keys`, then restart
+and verify both a newly signed receipt and an archival receipt before removing
+any old private-key backup. Default verification accepts only the active key;
+use `verify-receipt --allow-retired --allow-expired` deliberately for an
+archival receipt. Revoked keys are never accepted. A signature authenticates
+the Whetstone result and build identity; caller-supplied model and harness
+labels remain self-attested.
+
 ## Preflight and release
 
 From a clean, reviewed `main` checkout:
@@ -50,7 +69,18 @@ That gate runs the full suite, publication audit, Python/JavaScript/Bash syntax
 checks, wheel build, and a dependency-free clean-install smoke that serves the
 packaged UI and evidence.
 
-Publish from WSL or another Bash environment:
+Publish directly from Windows PowerShell. Archive and clean-tree checks use the
+native Windows Git checkout, while the default WSL transport reuses the
+operator's `vps2` SSH alias from Ubuntu:
+
+```powershell
+powershell.exe -NoProfile -File deploy/publish.ps1 -SshHost vps2 -GitRef HEAD -SshTransport Wsl
+```
+
+Use `-SshTransport Native` only when the same host alias and credentials are
+configured in Windows OpenSSH.
+
+Or publish from a clean Linux/WSL checkout:
 
 ```bash
 bash deploy/publish.sh vps2 HEAD
@@ -66,7 +96,7 @@ WHETSTONE_EXPECT_FORGE_ACTIVE=active bash deploy/publish.sh vps2 HEAD
 
 All later releases coordinate directly through `forge_cycle.lock`.
 
-`publish.sh` refuses a dirty or non-`main` checkout, builds only with
+Both publishers refuse a dirty or non-`main` checkout, build only with
 `git archive`, proves that Git expanded the embedded full commit, uploads the
 archive, and invokes `install-release.sh` with `sudo`.
 
@@ -82,7 +112,8 @@ The server-side installer:
 6. Starts tools only after that library sync, then requires matching version,
    full commit, eight core tools, the stateless workbench/private-bank boundary,
    a successful report-card warm-up, and a configured Open Promotion Bench
-   publication ledger that never retains tasks or answers.
+   publication ledger that never retains tasks or answers. It also requires the
+   persistent Ed25519 receipt signer to be configured and ready.
 7. Automatically restores the previous symlink and units if any activation
    gate fails.
 

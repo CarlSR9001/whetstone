@@ -1,0 +1,52 @@
+name: Publish MCP Registry metadata
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish existing domain namespace
+    if: github.repository == 'CarlSR9001/whetstone'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: mcp-registry-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify metadata matches the deployed service
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(jq -r .version server.json)"
+          actual="$(curl --fail --silent --show-error https://whetstone.cyberelf.link/api/health | jq -r .version)"
+          test "${actual}" = "${expected}"
+      - name: Install pinned MCP Publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/${asset}" "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/${asset}"
+          echo "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  ${RUNNER_TEMP}/${asset}" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/${asset}" -C "${RUNNER_TEMP}" mcp-publisher
+          "${RUNNER_TEMP}/mcp-publisher" --help >/dev/null
+      - name: Validate registry metadata
+        run: '"${RUNNER_TEMP}/mcp-publisher" validate server.json'
+      - name: Authenticate existing HTTP domain namespace
+        shell: bash
+        env:
+          MCP_HTTP_PRIVATE_KEY: ${{ secrets.MCP_HTTP_PRIVATE_KEY }}
+        run: >-
+          "${RUNNER_TEMP}/mcp-publisher" login http
+          --domain whetstone.cyberelf.link
+          --algorithm ed25519
+          --private-key "${MCP_HTTP_PRIVATE_KEY}"
+      - name: Publish and verify registry metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/mcp-publisher" publish
+          expected="$(jq -r .version server.json)"
+          actual="$(curl --fail --silent --show-error 'https://registry.modelcontextprotocol.io/v0.1/servers/link.cyberelf.whetstone%2Ftools/versions/latest' | jq -r '.server.version // .version')"
+          test "${actual}" = "${expected}"

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from bcv._version import __version__
+from bcv.hosted import run_open_bench
 from bcv.open_bench import open_bench
 from bcv.product_tools import examples
 from bcv.toolbox_service import _trusted_client_ip, make_server
@@ -77,7 +78,7 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["stateless"] is True
     assert payload["private_bank_loaded"] is False
     assert payload["tools"] == 8
-    assert payload["version"] == __version__ == "0.7.0"
+    assert payload["version"] == __version__ == "0.8.0"
     assert payload["build_commit"] == "development"
     assert payload["mcp_endpoint"] == "/mcp"
     assert payload["report_card"]["ready"] is False  # make_server never warms the hatchery
@@ -87,6 +88,7 @@ def test_health_exposes_stateless_boundary_and_security_headers(toolbox_url):
     assert payload["open_bench"]["publication_ledger_parent_writable"] is False
     assert payload["open_bench"]["raw_tasks_persisted"] is False
     assert payload["open_bench"]["raw_answers_persisted"] is False
+    assert payload["receipt_signing"]["configured"] is False
     assert response.headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
     assert response.headers["Server"].startswith(f"WhetstoneTools/{__version__} ")
@@ -147,7 +149,34 @@ def test_open_benchmark_start_rejects_ignored_fields(toolbox_url):
         urllib.request.urlopen(request, timeout=5)
     assert caught.value.code == 400
     body = json.loads(caught.value.read().decode("utf-8"))
-    assert "empty JSON object" in body["error"]
+    assert "optional challenge" in body["error"]
+
+
+def test_open_bench_runner_executes_baseline_and_candidate_commands(toolbox_url):
+    class BenchCandidate:
+        def __init__(self, solved: bool):
+            self.solved = solved
+
+        def generate_text(self, prompt: str, temperature: float = 0.0) -> str:
+            for session in open_bench().sessions.values():
+                for task in session["tasks"]:
+                    if task.public["item_id"] in prompt:
+                        patch = task.reference_patch if self.solved else {"writes": {}, "deletes": []}
+                        return json.dumps(patch)
+            raise AssertionError("runner prompt did not match a live Open Bench task")
+
+    receipt = run_open_bench(
+        toolbox_url,
+        BenchCandidate(False),
+        BenchCandidate(True),
+        baseline_manifest={"name": "baseline"},
+        candidate_manifest={"name": "candidate"},
+        challenge="paired-12345678",
+    )
+
+    assert receipt["verdict"] == "PASS"
+    assert receipt["gains"] == receipt["total"] == 6
+    assert receipt["attestation"]["status"] == "unsigned"
 
 
 def test_public_privacy_claims_match_operational_telemetry(toolbox_url):

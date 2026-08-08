@@ -166,9 +166,10 @@ Human runner and public receipts: https://whetstone.cyberelf.link/benchmark
   per address; counterexample hunts 4 per 10 minutes with a single global worker.
 - Right after a service restart the report card warms up for ~2 minutes;
   `report_card_start` says "warming up" and `GET /api/health` shows
-  `report_card.ready`. Retry after a minute.
+  `report_card.ready`. The hosted CLI retries this bounded warm-up
+  automatically; direct MCP/REST callers should follow `retry_after_seconds`.
 - Grading is CPU-bound behind a single slot; if the worker is busy your
-  session is spent by design — start a new one.
+  session remains valid. Retry the same submission after the reported delay.
 
 ## Trust boundary (why this is safe to use)
 

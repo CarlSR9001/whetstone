@@ -206,6 +206,7 @@ def load_fastcontext_tokenizer() -> Qwen2TokenizerFast:
 
 
 def load_base_model_4bit():
+    snapshot = find_fastcontext_snapshot()
     qconfig = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -213,7 +214,7 @@ def load_base_model_4bit():
         bnb_4bit_use_double_quant=True,
     )
     return AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
+        str(snapshot),
         local_files_only=True,
         trust_remote_code=True,
         quantization_config=qconfig,

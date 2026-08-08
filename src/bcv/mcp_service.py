@@ -82,7 +82,9 @@ def _hunt_with_limits(payload: dict, client_ip: str) -> dict:
 
 
 def _report_card_start(payload: dict, client_ip: str) -> dict:
-    return hatchery().start_session(client_ip)
+    if set(payload) - {"challenge"}:
+        raise TierError("report_card_start accepts only an optional challenge")
+    return hatchery().start_session(client_ip, payload.get("challenge"))
 
 
 def _report_card_submit(payload: dict, client_ip: str) -> dict:
@@ -93,9 +95,9 @@ def _report_card_submit(payload: dict, client_ip: str) -> dict:
 
 
 def _open_bench_start(payload: dict, client_ip: str) -> dict:
-    if payload:
-        raise OpenBenchError("open_bench_start takes no arguments")
-    return open_bench().start_session(client_ip)
+    if set(payload) - {"challenge"}:
+        raise OpenBenchError("open_bench_start accepts only an optional challenge")
+    return open_bench().start_session(client_ip, payload.get("challenge"))
 
 
 def _open_bench_submit(payload: dict, client_ip: str) -> dict:
@@ -171,7 +173,18 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
         "one-shot, expire in 15 minutes, and are strictly rate-limited. This demonstrates "
         "the promotion-gate mechanism on disposable items; it is not a private-bank "
         "credential.",
-        {"type": "object", "properties": {}, "additionalProperties": False},
+        {
+            "type": "object",
+            "properties": {
+                "challenge": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Caller nonce bound into the signed receipt for replay detection.",
+                }
+            },
+            "additionalProperties": False,
+        },
     ),
     "report_card_submit": (
         _report_card_submit,
@@ -200,7 +213,18 @@ TOOLS: dict[str, tuple[Callable[[dict, str], dict], str, dict]] = {
         "repository scope-integrity tasks. Run a baseline and candidate independently on the "
         "same cohort, then submit both answer maps with open_bench_submit. This is an open, "
         "procedural, self-attested track rather than a private-bank credential.",
-        {"type": "object", "properties": {}, "additionalProperties": False},
+        {
+            "type": "object",
+            "properties": {
+                "challenge": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Caller nonce bound into the signed receipt for replay detection.",
+                }
+            },
+            "additionalProperties": False,
+        },
     ),
     "open_bench_submit": (
         _open_bench_submit,
@@ -317,12 +341,23 @@ def _rpc_result(
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def _tool_failure(request_id: Any, message: str, *, modern: bool = False) -> dict:
+def _tool_failure(
+    request_id: Any,
+    message: str,
+    *,
+    modern: bool = False,
+    retryable: bool = False,
+    retry_after_seconds: int | None = None,
+) -> dict:
     # Tool-level failures are results with isError, not protocol errors.
+    structured = {"error": message, "retryable": retryable}
+    if retry_after_seconds is not None:
+        structured["retry_after_seconds"] = retry_after_seconds
     return _rpc_result(
         request_id,
         {
             "content": [{"type": "text", "text": message}],
+            "structuredContent": structured,
             "isError": True,
         },
         modern=modern,
@@ -511,13 +546,26 @@ def handle_mcp(
             STATS.tool_call(name, "mcp", "input_error", "invalid_input")
             return 200, _tool_failure(request_id, str(error), modern=modern)
         except TierError as error:
-            STATS.tool_call(name, "mcp", "input_error", "tier_refusal")
-            return 200, _tool_failure(request_id, str(error), modern=modern)
+            outcome = "limited" if error.retryable else "input_error"
+            reason = "busy" if error.retry_after_seconds is not None else "tier_refusal"
+            STATS.tool_call(name, "mcp", outcome, reason)
+            return 200, _tool_failure(
+                request_id,
+                str(error),
+                modern=modern,
+                retryable=error.retryable,
+                retry_after_seconds=error.retry_after_seconds,
+            )
         except OpenBenchError as error:
             outcome = "limited" if error.status >= 429 else "input_error"
             reason = "rate_limit" if error.status >= 429 else "bench_refusal"
             STATS.tool_call(name, "mcp", outcome, reason)
-            return 200, _tool_failure(request_id, str(error), modern=modern)
+            return 200, _tool_failure(
+                request_id,
+                str(error),
+                modern=modern,
+                retryable=error.retryable,
+            )
         except Exception as error:  # fail closed without reflecting internals
             STATS.tool_call(name, "mcp", "internal_error", "internal_exception")
             print(f"mcp tool {name} failed: {type(error).__name__}", flush=True)

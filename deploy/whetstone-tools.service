@@ -19,6 +19,9 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 StateDirectory=whetstone-tools
 Environment=WHETSTONE_STATE_DIR=/var/lib/whetstone-tools
 Environment=WHETSTONE_OPEN_BENCH_LEDGER=/var/lib/whetstone-tools/open_bench_public.jsonl
+Environment=WHETSTONE_RECEIPT_SIGNING_KEY=/var/lib/whetstone-tools/receipt_signing_key
+Environment=WHETSTONE_RECEIPT_TRUSTED_KEY_DIR=/var/lib/whetstone-tools/receipt_trusted_keys
+Environment=WHETSTONE_RECEIPT_ISSUER=https://whetstone.cyberelf.link
 # Forge-mined adversary graphs (synced there by whetstone-forge). When the
 # file exists, minting and grading pools both fold it in: the public exam
 # hardens as the forge finds counterexamples, and items stay fair because

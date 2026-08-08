@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -23,7 +24,18 @@ class LoraSmokeResult:
 
 
 def find_fastcontext_snapshot() -> Path:
-    root = Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--FastContext-1.0-4B-RL" / "snapshots"
+    override = os.environ.get("WHETSTONE_FASTCONTEXT_SNAPSHOT", "").strip()
+    if override:
+        snapshot = Path(override).expanduser()
+        if not snapshot.is_dir():
+            raise FileNotFoundError(f"FastContext snapshot override is not a directory: {snapshot}")
+        return snapshot
+    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    root = hf_home / "hub" / "models--microsoft--FastContext-1.0-4B-RL" / "snapshots"
+    if not root.is_dir():
+        raise FileNotFoundError(
+            f"no FastContext snapshot root at {root}; set WHETSTONE_FASTCONTEXT_SNAPSHOT"
+        )
     snapshots = sorted(path for path in root.iterdir() if path.is_dir())
     if not snapshots:
         raise FileNotFoundError(f"no FastContext snapshots under {root}")
@@ -57,7 +69,7 @@ def run_lora_smoke_from_dataset(
             bnb_4bit_use_double_quant=True,
         )
         model = AutoModelForCausalLM.from_pretrained(
-            base_model,
+            str(snapshot),
             local_files_only=True,
             trust_remote_code=True,
             quantization_config=qconfig,

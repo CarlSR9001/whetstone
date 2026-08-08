@@ -15,6 +15,13 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://whetstone.cyberelf.link/"
+Documentation = "https://github.com/CarlSR9001/whetstone#readme"
+Repository = "https://github.com/CarlSR9001/whetstone"
+Issues = "https://github.com/CarlSR9001/whetstone/issues"
+Changelog = "https://github.com/CarlSR9001/whetstone/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 agents = [
   "mcp>=2,<3",
@@ -41,6 +48,7 @@ all = [
 test = [
   "build>=1.2",
   "pytest>=8",
+  "spdx-tools>=0.8,<0.9",
   "mcp>=2,<3",
   "python-chess>=1.999",
   "torch",
@@ -52,6 +60,7 @@ test = [
 test-core = [
   "coverage>=7.6",
   "pytest>=8",
+  "spdx-tools>=0.8,<0.9",
   "mcp>=2,<3",
   "python-chess>=1.999",
 ]
@@ -73,5 +82,5 @@ where = ["src"]
 bcv = ["toolbox_static/*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]

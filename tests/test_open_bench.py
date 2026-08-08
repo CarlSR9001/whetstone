@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 import json
 import random
+import subprocess
 
 import pytest
 
 from bcv.open_bench import OpenBenchError, OpenPromotionBench
+from bcv.receipts import receipt_key_bundle, verify_receipt
 
 
 def make_bench(tmp_path, *, ttl: float = 1800.0) -> OpenPromotionBench:
@@ -16,6 +18,15 @@ def make_bench(tmp_path, *, ttl: float = 1800.0) -> OpenPromotionBench:
         rng_factory=lambda: random.Random(17),
         enforce_limits=False,
     )
+
+
+def enable_signing(tmp_path, monkeypatch) -> None:
+    key = tmp_path / "receipt-key"
+    subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "test", "-f", str(key)],
+        check=True,
+    )
+    monkeypatch.setenv("WHETSTONE_RECEIPT_SIGNING_KEY", str(key))
 
 
 def answers_for(bench: OpenPromotionBench, session_id: str, *, solved: bool) -> dict:
@@ -37,7 +48,8 @@ def payload(session: dict, baseline: dict, candidate: dict, *, publish: bool = F
     }
 
 
-def test_paired_gain_flow_publishes_only_sanitized_receipt(tmp_path):
+def test_paired_gain_flow_publishes_only_sanitized_receipt(tmp_path, monkeypatch):
+    enable_signing(tmp_path, monkeypatch)
     bench = make_bench(tmp_path)
     session = bench.start_session("198.51.100.1")
     baseline = answers_for(bench, session["session_id"], solved=False)
@@ -60,7 +72,20 @@ def test_paired_gain_flow_publishes_only_sanitized_receipt(tmp_path):
     assert "full replacement text" not in raw_ledger
     board = bench.leaderboard()
     assert board["entry_count"] == 1
-    assert board["entries"][0]["receipt_sha256"] == receipt["receipt_sha256"]
+    public_receipt = board["entries"][0]
+    assert verify_receipt(
+        public_receipt,
+        receipt_key_bundle(),
+        expected_challenge=session["challenge"],
+    )["valid"] is True
+    assert verify_receipt(
+        receipt,
+        receipt_key_bundle(),
+        expected_challenge=session["challenge"],
+    )["valid"] is True
+    assert public_receipt["source_evidence_sha256"] == receipt["grading_evidence_sha256"]
+    assert public_receipt["receipt_sha256"] == receipt["publication"]["public_receipt_sha256"]
+    assert public_receipt["receipt_sha256"] != receipt["receipt_sha256"]
     assert board["raw_tasks_persisted"] is False
     assert board["raw_answers_persisted"] is False
     public_id = receipt["publication"]["public_id"]
@@ -89,7 +114,8 @@ def test_regression_blocks_even_when_other_candidate_items_pass(tmp_path):
     assert failed["candidate"]["failure_codes"][0].startswith("out_of_scope_write:")
 
 
-def test_public_receipt_removes_answer_derived_failure_details(tmp_path):
+def test_public_receipt_removes_answer_derived_failure_details(tmp_path, monkeypatch):
+    enable_signing(tmp_path, monkeypatch)
     bench = make_bench(tmp_path)
     session = bench.start_session("198.51.100.9")
     baseline = answers_for(bench, session["session_id"], solved=True)
@@ -147,7 +173,8 @@ def test_publish_requires_explicit_attestation(tmp_path):
     assert session["session_id"] in bench.sessions
 
 
-def test_publication_failure_returns_private_receipt(tmp_path):
+def test_publication_failure_returns_private_receipt(tmp_path, monkeypatch):
+    enable_signing(tmp_path, monkeypatch)
     ledger_path = tmp_path / "public.jsonl"
     ledger_path.mkdir()
     bench = OpenPromotionBench(
@@ -180,11 +207,12 @@ def test_expired_session_is_destroyed(tmp_path, monkeypatch):
 
 def test_public_task_contract_is_bounded_and_hashable(tmp_path):
     bench = make_bench(tmp_path)
-    session = bench.start_session("198.51.100.7")
+    session = bench.start_session("198.51.100.7", "caller-12345678")
 
     assert len(session["tasks"]) == 6
     assert len(session["cohort_sha256"]) == 64
     assert session["track"] == "self_attested_procedural"
+    assert session["challenge"] == "caller-12345678"
     for task in session["tasks"]:
         assert set(task) == {"item_id", "title", "request", "repository", "scope"}
         assert task["scope"]["rule"].startswith("Every unlisted path")

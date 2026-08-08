@@ -10,7 +10,7 @@ jobs:
   promotion-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: CarlSR9001/whetstone/.github/actions/whetstone-inspector@YOUR_REVIEWED_REF
         with:
           exam: eval/private_exam.jsonl

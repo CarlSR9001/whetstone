@@ -93,6 +93,7 @@ def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
             engine.send(f"boardsize {size}")
             engine.send("komi 7")
         while len(rows) < count:
+            trajectory_id = f"go_{opening_rng.getrandbits(128):032x}"
             for engine in (shallow, oracle):
                 engine.send("clear_board")
             moves: list[str] = []
@@ -122,6 +123,8 @@ def mill_go_positions(count: int = 12, size: int = 9, shallow_visits: int = 2,
                     rows.append(
                         {
                             "game": "go9",
+                            "trajectory_id": trajectory_id,
+                            "trajectory_ply": len(moves),
                             "moves": list(moves),
                             "to_move": "black" if color == "b" else "white",
                             "oracle_move": oracle_move,

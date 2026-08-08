@@ -33,6 +33,10 @@ if ! command -v flock >/dev/null 2>&1; then
   printf 'error: flock is required for serialized activation\n' >&2
   exit 69
 fi
+if ! command -v ssh-keygen >/dev/null 2>&1; then
+  printf 'error: ssh-keygen with SSHSIG support is required for receipt signing\n' >&2
+  exit 69
+fi
 
 exec 9>/run/lock/whetstone-release.lock
 if ! flock -n 9; then
@@ -53,6 +57,7 @@ if [[ "${rollback_forge_state}" != "auto" ]]; then
   forge_was_active="${rollback_forge_state}"
 fi
 rollback_needed=0
+state_validator=""
 
 require_no_report_card_sessions() {
   if [[ "$(systemctl is-active whetstone-tools.service 2>/dev/null || true)" != "active" ]]; then
@@ -60,15 +65,9 @@ require_no_report_card_sessions() {
   fi
   local health
   health="$(curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8988/api/health)"
-  if ! WHETSTONE_HEALTH_JSON="${health}" python3 - <<'PY'
-import json
-import os
-
-payload = json.loads(os.environ["WHETSTONE_HEALTH_JSON"])
-assert payload["report_card"]["active_sessions"] == 0
-PY
-  then
+  if ! printf '%s' "${health}" | python3 "${state_validator}" sessions --quiet; then
     printf 'error: live report-card sessions are still active; retry after they expire or submit\n' >&2
+    printf '%s' "${health}" | python3 "${state_validator}" sessions || true
     exit 75
   fi
 }
@@ -76,6 +75,9 @@ PY
 cleanup() {
   rm -rf -- "${incoming}"
   rm -f -- "${archive}"
+  if [[ -n "${state_validator}" ]]; then
+    rm -f -- "${state_validator}"
+  fi
 }
 
 restore_file() {
@@ -138,6 +140,9 @@ on_error() {
 trap 'on_error "${LINENO}"' ERR
 trap cleanup EXIT
 
+state_validator="$(mktemp /tmp/whetstone-release-state.XXXXXX.py)"
+tar -xOf "${archive}" scripts/check_release_state.py > "${state_validator}"
+chmod 0500 "${state_validator}"
 require_no_report_card_sessions
 forge_pid="$(systemctl show whetstone-forge.service --property=MainPID --value 2>/dev/null || true)"
 if [[ "${forge_pid}" =~ ^[0-9]+$ ]] && (( forge_pid > 0 )); then
@@ -288,6 +293,23 @@ mv -Tf "${current_link}.new-$$" "${current_link}"
 systemctl daemon-reload
 systemctl enable whetstone-tools.service whetstone-forge.service
 install -d -o shankatsu -g shankatsu -m 0700 /var/lib/whetstone-tools
+receipt_key="/var/lib/whetstone-tools/receipt_signing_key"
+receipt_trusted="/var/lib/whetstone-tools/receipt_trusted_keys"
+install -d -o shankatsu -g shankatsu -m 0700 "$receipt_trusted"
+if [[ ! -s "$receipt_key" ]]; then
+  rm -f -- "$receipt_key.new" "$receipt_key.new.pub"
+  runuser --user shankatsu -- ssh-keygen -q -t ed25519 -N '' -C 'whetstone-receipt' -f "$receipt_key.new"
+  mv -f "$receipt_key.new" "$receipt_key"
+  mv -f "$receipt_key.new.pub" "$receipt_key.pub"
+elif [[ ! -s "$receipt_key.pub" ]]; then
+  runuser --user shankatsu -- ssh-keygen -y -f "$receipt_key" > "$receipt_key.pub.new"
+  mv -f "$receipt_key.pub.new" "$receipt_key.pub"
+fi
+chown shankatsu:shankatsu "$receipt_key" "$receipt_key.pub"
+chmod 0600 "$receipt_key"
+chmod 0644 "$receipt_key.pub"
+receipt_key_hash="$(sha256sum "$receipt_key.pub" | awk '{print $1}')"
+install -o shankatsu -g shankatsu -m 0644 "$receipt_key.pub" "$receipt_trusted/$receipt_key_hash.pub"
 
 forge_status="/home/shankatsu/whetstone-forge/state/forge_release_status.json"
 rm -f -- "${forge_status}"
@@ -296,6 +318,7 @@ forge_restarts="$(systemctl show whetstone-forge.service --property=NRestarts --
 forge_started_pid=""
 forge_ok=0
 forge_stable=0
+forge_last_json=""
 for _ in $(seq 1 20); do
   if systemctl is-active --quiet whetstone-forge.service && [[ -s "${forge_status}" ]]; then
     forge_pid="$(systemctl show whetstone-forge.service --property=MainPID --value)"
@@ -308,20 +331,9 @@ for _ in $(seq 1 20); do
         "${forge_started_pid}" "${forge_pid}" "${forge_restarts}" "${current_restarts}" >&2
       false
     fi
-    if WHETSTONE_FORGE_JSON="$(cat "${forge_status}")" python3 - \
-      "${commit}" "${target_version}" "${forge_pid}" <<'PY'
-import json
-import os
-import sys
-
-payload = json.loads(os.environ["WHETSTONE_FORGE_JSON"])
-expected_commit, expected_version, expected_pid = sys.argv[1:4]
-assert payload["status"] == "running"
-assert payload["version"] == expected_version
-assert payload["build_commit"] == expected_commit
-assert payload["library_sync"] in {"unchanged", "published", "source_absent"}
-assert payload["pid"] == int(expected_pid)
-PY
+    forge_last_json="$(cat "${forge_status}")"
+    if printf '%s' "${forge_last_json}" | python3 "${state_validator}" forge \
+      --commit "${commit}" --version "${target_version}" --pid "${forge_pid}" --quiet
     then
       forge_stable=$((forge_stable + 1))
       if (( forge_stable >= 5 )); then
@@ -338,6 +350,10 @@ PY
 done
 if (( ! forge_ok )); then
   printf 'error: forge release identity did not converge for %s\n' "${commit}" >&2
+  if [[ -n "${forge_last_json}" ]]; then
+    printf '%s' "${forge_last_json}" | python3 "${state_validator}" forge \
+      --commit "${commit}" --version "${target_version}" --pid "${forge_pid}" || true
+  fi
   false
 fi
 
@@ -345,30 +361,12 @@ fi
 # Starting tools afterward guarantees the hatchery warms exactly that revision.
 systemctl start whetstone-tools.service
 health_ok=0
+health_json=""
 health_deadline=$((SECONDS + 600))
 while (( SECONDS < health_deadline )); do
   if health_json="$(curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8988/api/health 2>/dev/null)"; then
-    if WHETSTONE_HEALTH_JSON="${health_json}" python3 - "${commit}" "${target_version}" <<'PY'
-import json
-import os
-import sys
-
-payload = json.loads(os.environ["WHETSTONE_HEALTH_JSON"])
-expected_commit, expected_version = sys.argv[1:3]
-assert payload["status"] == "ok"
-assert payload["version"] == expected_version
-assert payload["build_commit"] == expected_commit
-assert payload["tools"] == 8
-assert payload["stateless"] is True
-assert payload["private_bank_loaded"] is False
-assert payload["report_card"]["error"] is None
-assert payload["report_card"]["ready"] is True
-assert payload["open_bench"]["ready"] is True
-assert payload["open_bench"]["publication_ledger_configured"] is True
-assert payload["open_bench"]["publication_ledger_parent_writable"] is True
-assert payload["open_bench"]["raw_tasks_persisted"] is False
-assert payload["open_bench"]["raw_answers_persisted"] is False
-PY
+    if printf '%s' "${health_json}" | python3 "${state_validator}" health \
+      --commit "${commit}" --version "${target_version}" --quiet
     then
       health_ok=1
       break
@@ -378,6 +376,10 @@ PY
 done
 if (( ! health_ok )); then
   printf 'error: local health gate did not converge for %s\n' "${commit}" >&2
+  if [[ -n "${health_json}" ]]; then
+    printf '%s' "${health_json}" | python3 "${state_validator}" health \
+      --commit "${commit}" --version "${target_version}" || true
+  fi
   false
 fi
 systemctl is-enabled --quiet whetstone-tools.service

@@ -17,8 +17,10 @@ import urllib.request
 import pytest
 
 import bcv.ephemeral as ephemeral
+import bcv.hosted as hosted
 from bcv._version import __version__
 from bcv.ephemeral import MIN_SUPPORT_RETENTION, Hatchery, TierError, _passes_support_floor
+from bcv.hosted import run_report_card
 from bcv.mcp_service import MODERN_PROTOCOL_VERSION, SERVER_INFO_META_KEY, handle_mcp
 from bcv.product_tools import examples, gate_results, input_schemas
 from bcv.toolbox_service import make_server
@@ -357,8 +359,12 @@ def test_bad_tool_input_is_a_tool_failure_not_a_protocol_error():
 
 def test_report_card_full_flow_with_certified_repairs(warm_hatchery):
     ip = next(_IP)
-    status, body = handle_mcp(rpc("tools/call", {"name": "report_card_start", "arguments": {}}), ip)
+    status, body = handle_mcp(rpc("tools/call", {
+        "name": "report_card_start",
+        "arguments": {"challenge": "report-12345678"},
+    }), ip)
     session = body["result"]["structuredContent"]
+    assert session["challenge"] == "report-12345678"
     assert len(session["items"]) == 2
     for item in session["items"]:
         assert set(item) == {"item_id", "domain", "prompt"}  # no payload, no lineage, no repair
@@ -378,6 +384,25 @@ def test_report_card_full_flow_with_certified_repairs(warm_hatchery):
     assert not any(row["degenerate_narrowing"] for row in report["items"])
     assert report["grading_policy"]["minimum_support_retention"] == MIN_SUPPORT_RETENTION
     assert report["median_support_retention"] is not None
+    assert len(report["receipt_sha256"]) == 64
+    assert report["attestation"]["status"] == "unsigned"
+
+
+def test_busy_report_card_preserves_session_and_returns_retry_after(warm_hatchery):
+    ip = next(_IP)
+    session = warm_hatchery.start_session(ip)
+    assert ephemeral.GRADE_SLOT.acquire(blocking=False)
+    try:
+        with pytest.raises(TierError, match="session is preserved") as caught:
+            warm_hatchery.submit(session["session_id"], {}, ip)
+        assert caught.value.retryable is True
+        assert caught.value.retry_after_seconds == 2
+        assert session["session_id"] in warm_hatchery.sessions
+    finally:
+        ephemeral.GRADE_SLOT.release()
+
+    report = warm_hatchery.submit(session["session_id"], {}, ip)
+    assert report["session_spent"] is True
 
 
 def test_report_card_separates_checker_verification_from_promotion_grade(warm_hatchery, monkeypatch):
@@ -460,8 +485,28 @@ def test_per_ip_start_limit(warm_hatchery):
 
 def test_cold_hatchery_reports_warming_not_a_crash():
     cold = Hatchery()
-    with pytest.raises(TierError, match="warming up"):
+    with pytest.raises(TierError, match="warming up") as caught:
         cold.start_session(next(_IP))
+    assert caught.value.retryable is True
+    assert caught.value.retry_after_seconds == 10
+
+
+def test_hosted_retry_requires_server_supplied_bounded_delay(monkeypatch):
+    calls = 0
+
+    def request(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise hosted.HostedServiceError(
+                429,
+                {"error": "busy", "retryable": True, "retry_after_seconds": 0},
+            )
+        return {"ok": True}
+
+    monkeypatch.setattr(hosted, "_request_json", request)
+    assert hosted._submit_with_retry("http://127.0.0.1", "/test", {}, timeout=1, retries=1) == {"ok": True}
+    assert calls == 2
 
 
 # ------------------------------------------------------------------- HTTP shell
@@ -501,6 +546,28 @@ def test_http_mcp_initialize_and_notification(toolbox_url):
     status, body = _post(toolbox_url + "/mcp", {"jsonrpc": "2.0", "method": "notifications/initialized"})
     assert status == 202
     assert body is None
+
+
+def test_hosted_report_card_runner_completes_real_rest_flow(toolbox_url, warm_hatchery):
+    from bcv.examiner import repair_item_prompt
+
+    class CertifiedCandidate:
+        def generate_text(self, prompt: str, temperature: float = 0.0) -> str:
+            for live_session in warm_hatchery.sessions.values():
+                for _, item in live_session["items"].values():
+                    if repair_item_prompt(item) == prompt:
+                        return json.dumps({"repair_expression": item.lineage[0].split(":", 1)[1]})
+            raise AssertionError("runner prompt did not match a live session item")
+
+    receipt = run_report_card(
+        toolbox_url,
+        CertifiedCandidate(),
+        challenge="runner-12345678",
+    )
+
+    assert receipt["passed"] == receipt["total"] == 2
+    assert receipt["attestation"]["status"] == "unsigned"
+    assert len(receipt["receipt_sha256"]) == 64
 
 
 def test_http_mcp_modern_discovery_and_tools_list(toolbox_url):

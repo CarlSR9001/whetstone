@@ -79,6 +79,16 @@ the gate still BLOCKED on one stable chess regression and p=.0524788. See
 tool and bank paths, so they can run without copying gitignored engines into a
 worktree:
 
+The first trajectory-disjoint Gen-4 student was trained on 1,313 fresh engine
+examples after splitting whole Stockfish/KataGo trajectories and rejecting
+exact retained-bank collisions. Three fresh loads moved the aggregate from
+7/69 to 8/69, but the paired result was three gains, two regressions, 64 ties,
+and exact p=1.0. Both strict and reliability-aware policy BLOCKED promotion;
+one regression was historically stable. The sanitized
+`results/gen4_engine_student_evaluation_receipt.json` contains commitments
+only and explicitly makes no promotion claim. The retained bank is not reused
+as tuning feedback after that observation.
+
 The published-GTP-log incident is enforced in defaults now: HEAD carries only
 SHA-256 commitments to the 22 permanently public move prefixes, so a fresh
 clone can quarantine collisions without republishing the trajectories. Go

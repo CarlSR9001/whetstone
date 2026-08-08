@@ -1,0 +1,321 @@
+{
+  "artifact_type": "evaluation_receipt",
+  "bank": {
+    "after_grading_sha256": "d95a1b7f3d7582c26f366c650b544d5c1049d2f1c62a61bc8ae3bbabbbd86e52",
+    "before_grading_sha256": "da48d14d51a20198ef20963d594cb1e92ddd03271c4960369fd2d8d0de36d95a",
+    "grade_events_sha256": "29794f0479d82b1d907ffd55144b4bfd99856324f7c4f96ffedcaf7b53a42923",
+    "promoted_items": 69
+  },
+  "created_at": "2026-08-08T12:43:47.981293+00:00",
+  "evidence_scope": "trajectory-disjoint private Gen-4 engine student",
+  "gate_reliability_aware": {
+    "exact_mcnemar_two_sided_p": 1.0,
+    "gains": 3,
+    "reasons": [
+      "1 regression(s) are on historically stable item(s)"
+    ],
+    "regression_classifications": [
+      {
+        "classification": "noisy",
+        "domain": "go",
+        "flip_rate": 0.08333333333333333
+      },
+      {
+        "classification": "stable",
+        "domain": "go",
+        "flip_rate": 0.0
+      }
+    ],
+    "regressions": 2,
+    "resolution": {
+      "additional_clean_discriminators_needed_if_current_outcomes_were_clean": 1,
+      "additional_clean_wins_needed_if_current_regressions_persist": 7,
+      "alpha": 0.05,
+      "best_case_p_if_observed_discordants_were_all_clean": 0.0625,
+      "minimum_clean_discordant_wins": 6,
+      "observed_discordant_items": 5
+    },
+    "ties": 64,
+    "verdict": "BLOCK"
+  },
+  "gate_strict": {
+    "exact_mcnemar_two_sided_p": 1.0,
+    "gains": 3,
+    "reasons": [
+      "2 regression(s) exceed the policy limit of 0"
+    ],
+    "regression_classifications": [
+      {
+        "classification": "noisy",
+        "domain": "go",
+        "flip_rate": 0.08333333333333333
+      },
+      {
+        "classification": "stable",
+        "domain": "go",
+        "flip_rate": 0.0
+      }
+    ],
+    "regressions": 2,
+    "resolution": {
+      "additional_clean_discriminators_needed_if_current_outcomes_were_clean": 1,
+      "additional_clean_wins_needed_if_current_regressions_persist": 7,
+      "alpha": 0.05,
+      "best_case_p_if_observed_discordants_were_all_clean": 0.0625,
+      "minimum_clean_discordant_wins": 6,
+      "observed_discordant_items": 5
+    },
+    "ties": 64,
+    "verdict": "BLOCK"
+  },
+  "hardware": "NVIDIA GeForce RTX 5060",
+  "milling": {
+    "created_at": "2026-08-08T12:26:32.170758+00:00",
+    "engines": {
+      "chess": "Stockfish d12 oracle versus d2 shallow, one thread",
+      "go": "KataGo v48 oracle versus v2 shallow, 4-8-stone SystemRandom opening"
+    },
+    "files": {
+      "chess_sha256": "e13f94ba0bbb3dfbed8b8464856678ebf00b7cd817ceb72b4626020a3fa1f9c6",
+      "go_sha256": "33454136e1ccb15110d588ee8215f62ddbcc0536bd8a754d1a3efa1bfe244cfb"
+    },
+    "new_rows": {
+      "chess": 1000,
+      "go": 500
+    },
+    "raw_positions_public": false,
+    "schema_version": 1,
+    "trajectories": {
+      "chess": 64,
+      "go": 59,
+      "randomized_non_replayable": true
+    }
+  },
+  "model": {
+    "adapter_config_sha256": "979a755df194e3fd6abb006134a370f27111f384d57758770fe96f4fe5f91b19",
+    "adapter_sha256": "ae15b6fe244b3b64cd73375d3e535475d5eea16d71e496e8dbc803514853c4c3",
+    "base": "microsoft/FastContext-1.0-4B-RL",
+    "base_snapshot_commit": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42"
+  },
+  "promotion_claim": false,
+  "repeated_grading": {
+    "baseline": {
+      "fresh_model_load_per_run": true,
+      "outcome_vector_sha256": [
+        "e5915df767826e0c726276e313f62e248c8b36698da236ed9e0ad5e333bc101f",
+        "e5915df767826e0c726276e313f62e248c8b36698da236ed9e0ad5e333bc101f",
+        "e5915df767826e0c726276e313f62e248c8b36698da236ed9e0ad5e333bc101f"
+      ],
+      "run_manifests": [
+        {
+          "adapter": "TransformersLocalClient",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 79.1132,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        },
+        {
+          "adapter": "TransformersLocalClient",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 90.4843,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        },
+        {
+          "adapter": "TransformersLocalClient",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 75.6924,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        }
+      ],
+      "runs": 3,
+      "scores": [
+        7,
+        7,
+        7
+      ],
+      "unique_item_outcome_vectors": 1
+    },
+    "candidate": {
+      "fresh_model_load_per_run": true,
+      "outcome_vector_sha256": [
+        "a292356d4726b7db69ce6d56f556052c02937c8cc3502669fcc3d9791fe9ee92",
+        "a292356d4726b7db69ce6d56f556052c02937c8cc3502669fcc3d9791fe9ee92",
+        "a292356d4726b7db69ce6d56f556052c02937c8cc3502669fcc3d9791fe9ee92"
+      ],
+      "run_manifests": [
+        {
+          "adapter": "TransformersLocalClient",
+          "adapter_sha256": "ae15b6fe244b3b64cd73375d3e535475d5eea16d71e496e8dbc803514853c4c3",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 87.9829,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        },
+        {
+          "adapter": "TransformersLocalClient",
+          "adapter_sha256": "ae15b6fe244b3b64cd73375d3e535475d5eea16d71e496e8dbc803514853c4c3",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 83.6081,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        },
+        {
+          "adapter": "TransformersLocalClient",
+          "adapter_sha256": "ae15b6fe244b3b64cd73375d3e535475d5eea16d71e496e8dbc803514853c4c3",
+          "backend": "transformers",
+          "burn_external": false,
+          "elapsed_seconds": 86.2159,
+          "external": false,
+          "infrastructure": "local_rtx_5060",
+          "item_set_sha256": "c328dc8c3b3bcf9b5c5ef5710e5e82f9d6696aadcf74e98e890cfe6949d3af9a",
+          "items_graded": 69,
+          "max_items": null,
+          "max_tokens": 48,
+          "model": "microsoft/FastContext-1.0-4B-RL",
+          "model_revision": "bd530b8e1f9a59b12e77061d9fe1e018f6eabe42",
+          "quantization": "nf4_runtime",
+          "seed": 0,
+          "stress_ns": [
+            7,
+            8
+          ],
+          "temperature": 0.0,
+          "trust_zone": "local_process"
+        }
+      ],
+      "runs": 3,
+      "scores": [
+        8,
+        8,
+        8
+      ],
+      "unique_item_outcome_vectors": 1
+    }
+  },
+  "sanitization": "counts and commitments only; no item ids, FENs, Go histories, raw outputs, or local paths",
+  "training": {
+    "accepted": true,
+    "checkpoints_written": 14,
+    "device": "cuda",
+    "epochs": 1,
+    "final_loss": 0.5526061058044434,
+    "heldout_examples": 0,
+    "resumed_from_step": 0,
+    "skipped_steps": 0,
+    "steps_completed": 1313,
+    "train_examples": 1313
+  },
+  "training_data": {
+    "deduplication": {
+      "duplicate_positions_removed": 0,
+      "promoted_bank_collisions_removed": 0
+    },
+    "holdout": {
+      "chess_rows": 150,
+      "go_rows": 37,
+      "positions_sha256": "5aea47583d91d395e27d5fc188aa3ac08be3548eec04b8626bbe854301ba37f7",
+      "rows": 187,
+      "trajectories": 12
+    },
+    "invariants": {
+      "raw_positions_public": false,
+      "train_holdout_trajectory_overlap": 0,
+      "train_promoted_exact_position_overlap": 0
+    },
+    "retained_bank": {
+      "engine_position_commitment": "2a05cf4334d81b06f83e3ffb7689d3d751e5488caae76e04301da4642e505977",
+      "promoted_items": 69
+    },
+    "schema_version": 1,
+    "source": {
+      "chess_rows": 1000,
+      "go_rows": 500,
+      "rows": 1500,
+      "sha256": "fa0133a1d5a09f6a15d27238c33911bae20b24881ec15429188a950056d3aab2"
+    },
+    "train": {
+      "chess_rows": 850,
+      "go_rows": 463,
+      "rows": 1313,
+      "sft_sha256": "cedc023b4933648dc3882ff0b3450bb74d24283ef74b3d663f1a42900a3c1295",
+      "trajectories": 111
+    }
+  }
+}

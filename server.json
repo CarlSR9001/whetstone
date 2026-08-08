@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "link.cyberelf.whetstone/tools",
+  "title": "Whetstone",
+  "description": "Verifier-grounded AI promotion gates, disposable report cards, and signed PASS/HOLD/BLOCK receipts.",
+  "repository": {
+    "url": "https://github.com/CarlSR9001/whetstone",
+    "source": "github"
+  },
+  "websiteUrl": "https://whetstone.cyberelf.link/",
+  "version": "0.8.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://whetstone.cyberelf.link/mcp"
+    }
+  ]
+}

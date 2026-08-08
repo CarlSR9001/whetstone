@@ -593,9 +593,33 @@ Against stock Qwen2.5-32B, routed gen-3 has nine gains and one regression
 despite the 28/48 vs 20/48 aggregate. This is the intended distinction between
 "higher score" and "earned promotion."
 
+## 20. Gen-4 engine student: aggregate gain, item-level BLOCK
+
+The first engine-student round used 1,000 fresh Stockfish rows and 500 fresh
+KataGo rows. Positions were grouped by non-replayable trajectory before a
+deterministic split: 1,313 training examples across 111 trajectories and 187
+held-out rows across 12 trajectories, with zero trajectory overlap and zero
+exact collisions against the 69-item retained promotion bank. Raw positions,
+move histories, item IDs, model outputs, and checkpoints remain private.
+
+FastContext-4B trained for 1,313 CUDA steps on an RTX 5060 with zero skipped
+steps (final loss 0.552606). The adapter and base were then graded through three
+fresh model loads each. Every base load scored 7/69 and every adapter load
+scored 8/69. That aggregate movement did not earn promotion: paired outcomes
+were three gains, two regressions, and 64 ties, exact McNemar p=1.0. The strict
+gate BLOCKED both regressions; the reliability-aware gate also BLOCKED because
+one regression was historically stable.
+
+`results/gen4_engine_student_evaluation_receipt.json` commits to the base
+snapshot, adapter, source/split hashes, bank state, grade events, and repeated
+outcome vectors without exposing private examples. It is deliberately an
+evaluation receipt, not a promotion receipt, and `promotion_claim` is false.
+The retained bank is frozen after this result; tuning another candidate against
+the observed failures would turn the holdout into training feedback.
+
 ## Commands
 
 See README ("hard repair dataset", "stress-test", "stress-mined") for the exact
 invocations. `python -m pytest` covers the DSL analysis, dataset invariants
 (no leak, group disjointness, distinct evidence), and the adversarial families
-(214 tests in the current suite).
+(345 tests in the v0.8.0 suite).

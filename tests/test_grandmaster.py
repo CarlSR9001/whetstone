@@ -34,6 +34,8 @@ def test_mill_produces_engine_labeled_rows():
     assert len(rows) == 3
     for row in rows:
         assert row["fen"] and len(row["oracle_move"]) >= 4
+        assert row["trajectory_id"].startswith("chess_")
+        assert isinstance(row["trajectory_ply"], int)
 
 
 def test_chess_exam_item_grading_shape():

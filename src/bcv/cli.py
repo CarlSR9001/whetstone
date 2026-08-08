@@ -12,6 +12,7 @@
     whetstone local-bakeoff             run a fresh localhost-only paired code experiment
     whetstone serve --port 8977         the examiner as a local JSON service
     whetstone inspect --exam ...        stateless files-in promotion receipt
+    whetstone verify-receipt ...        verify a signed hosted receipt
     whetstone toolbox --port 8988       public stateless product suite
 
 Exit codes are the CI contract: PASS=0, HOLD=2, BLOCK=3, usage/config errors=1.
@@ -28,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import shlex
 import sys
 import tomllib
@@ -427,6 +429,140 @@ def cmd_inspect(args, config: dict) -> int:
     return EXIT_BY_VERDICT[report["gate"]["verdict"]]
 
 
+def cmd_verify_receipt(args, config: dict) -> int:
+    """Verify a hosted receipt against an explicit or HTTPS-fetched key bundle."""
+    import urllib.request
+    from urllib.parse import urlsplit
+
+    from bcv.receipts import ReceiptVerificationError, verify_receipt
+
+    try:
+        receipt = json.loads(Path(args.receipt).read_text(encoding="utf-8-sig"))
+        key_url = urlsplit(args.keys)
+        if key_url.scheme in {"https", "http"}:
+            loopback = (key_url.hostname or "").lower() in {"127.0.0.1", "::1", "localhost"}
+            if key_url.scheme != "https" and not loopback:
+                raise ValueError("remote receipt key bundles require HTTPS")
+            with urllib.request.urlopen(args.keys, timeout=10) as response:
+                key_bundle = json.loads(response.read())
+        else:
+            key_bundle = json.loads(Path(args.keys).read_text(encoding="utf-8-sig"))
+        result = verify_receipt(
+            receipt,
+            key_bundle,
+            expected_challenge=args.expected_challenge,
+            expected_issuer=args.expected_issuer,
+            now=args.at_unix,
+            allow_expired=args.allow_expired,
+            allow_retired=args.allow_retired,
+        )
+    except (OSError, ValueError, json.JSONDecodeError, ReceiptVerificationError) as error:
+        print(json.dumps({"valid": False, "error": str(error)}, sort_keys=True))
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _write_hosted_receipt(path: str, receipt: dict) -> None:
+    Path(path).write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def cmd_hosted_report_card(args, config: dict) -> int:
+    from bcv.candidates import CandidateError
+    from bcv.hosted import HostedServiceError, run_report_card, verify_hosted_receipt
+    from bcv.receipts import ReceiptVerificationError
+
+    challenge = secrets.token_hex(16)
+    try:
+        candidate = build_candidate(args)
+        receipt = run_report_card(
+            args.url,
+            candidate,
+            challenge=challenge,
+            request_timeout=args.request_timeout,
+            start_retries=args.start_retries,
+            submit_retries=args.submit_retries,
+        )
+        verification = verify_hosted_receipt(
+            args.url,
+            receipt,
+            expected_challenge=challenge,
+            allow_unsigned=args.allow_unsigned,
+        )
+        _write_hosted_receipt(args.out, receipt)
+    except (CandidateError, HostedServiceError, ReceiptVerificationError, OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"RESULT: {receipt['passed']}/{receipt['total']} promotion-grade")
+    print(f"SIGNATURE: {'verified' if verification else receipt.get('attestation', {}).get('status', 'missing')}")
+    print(f"RECEIPT: {args.out}")
+    return 0 if receipt["passed"] == receipt["total"] else 2
+
+
+def _manifest(name: str, model: str | None, harness: str | None, version: str | None) -> dict:
+    return {
+        key: value
+        for key, value in {
+            "name": name,
+            "model": model,
+            "harness": harness,
+            "version": version,
+        }.items()
+        if value
+    }
+
+
+def cmd_open_bench_run(args, config: dict) -> int:
+    from bcv.candidates import CandidateError, CommandCandidate
+    from bcv.hosted import HostedServiceError, run_open_bench, verify_hosted_receipt
+    from bcv.receipts import ReceiptVerificationError
+
+    challenge = secrets.token_hex(16)
+    try:
+        baseline = CommandCandidate(shlex.split(args.baseline_command), timeout_seconds=args.timeout)
+        candidate = CommandCandidate(shlex.split(args.candidate_command), timeout_seconds=args.timeout)
+        receipt = run_open_bench(
+            args.url,
+            baseline,
+            candidate,
+            baseline_manifest=_manifest(
+                args.baseline_name,
+                args.baseline_model,
+                args.baseline_harness,
+                args.baseline_version,
+            ),
+            candidate_manifest=_manifest(
+                args.candidate_name,
+                args.candidate_model,
+                args.candidate_harness,
+                args.candidate_version,
+            ),
+            challenge=challenge,
+            publish=args.publish,
+            request_timeout=args.request_timeout,
+        )
+        verification = verify_hosted_receipt(
+            args.url,
+            receipt,
+            expected_challenge=challenge,
+            allow_unsigned=args.allow_unsigned,
+        )
+        _write_hosted_receipt(args.out, receipt)
+    except (CandidateError, HostedServiceError, ReceiptVerificationError, OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"DECISION: {receipt['verdict']}")
+    print(f"GAINS: {receipt['gains']}")
+    print(f"REGRESSIONS: {receipt['regressions']}")
+    print(f"SIGNATURE: {'verified' if verification else receipt.get('attestation', {}).get('status', 'missing')}")
+    print(f"RECEIPT: {args.out}")
+    return EXIT_BY_VERDICT[receipt["verdict"]]
+
+
 def cmd_toolbox(args, config: dict) -> int:
     from bcv.toolbox_service import serve
 
@@ -576,6 +712,67 @@ def build_parser() -> argparse.ArgumentParser:
     p_inspect.add_argument("--clean-exam-out", help="write post-quarantine exam JSONL")
     p_inspect.add_argument("--json", action="store_true", help="print the complete receipt")
     p_inspect.set_defaults(fn=cmd_inspect)
+
+    p_verify = sub.add_parser("verify-receipt", help="verify a challenge-bound hosted receipt signature")
+    p_verify.add_argument("--receipt", required=True, help="receipt JSON file")
+    p_verify.add_argument(
+        "--keys",
+        default="https://whetstone.cyberelf.link/.well-known/whetstone-receipt-keys.json",
+        help="trusted key-bundle JSON file or HTTPS URL",
+    )
+    p_verify.add_argument("--expected-challenge", help="caller nonce from session start")
+    p_verify.add_argument(
+        "--expected-issuer",
+        default="https://whetstone.cyberelf.link",
+        help="exact signed issuer",
+    )
+    p_verify.add_argument("--allow-expired", action="store_true", help="verify archival signatures past their replay window")
+    p_verify.add_argument("--allow-retired", action="store_true", help="allow an explicitly retired archival signing key")
+    p_verify.add_argument("--at-unix", type=int, help=argparse.SUPPRESS)
+    p_verify.set_defaults(fn=cmd_verify_receipt)
+
+    p_hosted = sub.add_parser("hosted-report-card", help="run one agent against the hosted disposable report card")
+    p_hosted.add_argument("--url", default="https://whetstone.cyberelf.link")
+    p_hosted.add_argument("--command", help="agent command; prompt on stdin, answer on stdout")
+    p_hosted.add_argument("--api-base", help="OpenAI-compatible API root")
+    p_hosted.add_argument("--model", help="model name for --api-base")
+    p_hosted.add_argument("--api-key-env", help="environment variable holding the API key")
+    p_hosted.add_argument("--acp", help="Agent Client Protocol command")
+    p_hosted.add_argument("--timeout", type=float, default=120.0, help="seconds per agent answer")
+    p_hosted.add_argument("--max-tokens", type=int, default=1024)
+    p_hosted.add_argument("--request-timeout", type=float, default=30.0)
+    p_hosted.add_argument("--start-retries", type=int, default=12)
+    p_hosted.add_argument("--submit-retries", type=int, default=5)
+    p_hosted.add_argument(
+        "--allow-unsigned",
+        action="store_true",
+        help="accept an unsigned receipt from a local development service",
+    )
+    p_hosted.add_argument("--out", default="whetstone-report-card.json")
+    p_hosted.set_defaults(fn=cmd_hosted_report_card, answers=None)
+
+    p_open_run = sub.add_parser("open-bench-run", help="run baseline and candidate commands on one hosted paired cohort")
+    p_open_run.add_argument("--url", default="https://whetstone.cyberelf.link")
+    p_open_run.add_argument("--baseline-command", required=True)
+    p_open_run.add_argument("--candidate-command", required=True)
+    p_open_run.add_argument("--baseline-name", default="baseline")
+    p_open_run.add_argument("--candidate-name", default="candidate")
+    p_open_run.add_argument("--baseline-model")
+    p_open_run.add_argument("--candidate-model")
+    p_open_run.add_argument("--baseline-harness", default="command")
+    p_open_run.add_argument("--candidate-harness", default="command")
+    p_open_run.add_argument("--baseline-version")
+    p_open_run.add_argument("--candidate-version")
+    p_open_run.add_argument("--timeout", type=float, default=120.0, help="seconds per task")
+    p_open_run.add_argument("--request-timeout", type=float, default=30.0)
+    p_open_run.add_argument(
+        "--allow-unsigned",
+        action="store_true",
+        help="accept an unsigned receipt from a local development service",
+    )
+    p_open_run.add_argument("--publish", action="store_true", help="publish only the sanitized public receipt")
+    p_open_run.add_argument("--out", default="whetstone-open-bench.json")
+    p_open_run.set_defaults(fn=cmd_open_bench_run)
 
     p_toolbox = sub.add_parser("toolbox", help="serve the stateless public product suite")
     p_toolbox.add_argument("--host", default="127.0.0.1")

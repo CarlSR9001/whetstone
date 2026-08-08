@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import secrets
 import uuid
 from pathlib import Path
 
@@ -115,17 +116,26 @@ def mill_positions(
     shallow_depth: int = 2,
     seed: int = 0,
     engine_path: str | Path = STOCKFISH,
+    trajectory_rng: random.Random | None = None,
 ) -> list[dict]:
+    """Mill labeled positions from non-replayable game trajectories.
+
+    The seeded RNG controls sampling cadence only. Initial move sequences and
+    opaque trajectory IDs come from SystemRandom unless a test RNG is injected,
+    so publishing a seed cannot reconstruct later training trajectories.
+    """
     rng = random.Random(seed)
+    trajectory_rng = trajectory_rng or secrets.SystemRandom()
     engine = open_engine(engine_path)
     rows: list[dict] = []
     try:
         while len(rows) < count:
+            trajectory_id = f"chess_{trajectory_rng.getrandbits(128):032x}"
             board = chess.Board()
-            for _ in range(rng.randrange(6, 14)):
+            for _ in range(trajectory_rng.randrange(6, 14)):
                 if board.is_game_over():
                     break
-                board.push(rng.choice(list(board.legal_moves)))
+                board.push(trajectory_rng.choice(list(board.legal_moves)))
             while not board.is_game_over() and board.ply() < 60 and len(rows) < count:
                 if rng.random() < 0.35:
                     oracle_move = engine.play(board, chess.engine.Limit(depth=oracle_depth)).move
@@ -133,6 +143,8 @@ def mill_positions(
                     rows.append(
                         {
                             "game": "chess",
+                            "trajectory_id": trajectory_id,
+                            "trajectory_ply": board.ply(),
                             "fen": board.fen(),
                             "oracle_move": oracle_move.uci(),
                             "shallow_move": shallow_move.uci(),
